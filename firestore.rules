@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: products
+    // Fields:
+    //   - name: string (required, max 100 chars)
+    //   - price: number (required, >= 0)
+    //   - category: string (required, max 50 chars)
+    //   - createdAt: string (required, ISO 8601)
+    //
+    // Collection: orders
+    // Fields:
+    //   - type: string (required, 'balcao', 'mesa', 'fiado')
+    //   - status: string (required, 'open', 'closed')
+    //   - items: list (required, max 100 items)
+    //   - total: number (required, >= 0)
+    //   - paymentMethod: string (optional, 'dinheiro', 'cartao', 'pix')
+    //   - createdAt: string (required, ISO 8601)
+    //   - closedAt: string (optional, ISO 8601)
+    //   - password: number (optional)
+    //   - tableNumber: number (optional)
+    //   - customerName: string (optional, max 100 chars)
+    //   - cashierId: string (optional)
+    //
+    // Collection: cashierSessions
+    // Fields:
+    //   - status: string (required, 'open', 'closed')
+    //   - openedAt: string (required, ISO 8601)
+    //   - closedAt: string (optional, ISO 8601)
+    //   - initialBalance: number (required, >= 0)
+    //   - finalBalance: number (optional, >= 0)
+    //   - totalSales: number (required, >= 0)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidNumber(val, minVal) {
+      return val is number && val >= minVal;
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // Domain Validators
+    function isValidProduct(data) {
+      return data.keys().hasAll(['name', 'price', 'category', 'createdAt']) &&
+             isValidString(data.name, 1, 100) &&
+             isValidNumber(data.price, 0) &&
+             isValidString(data.category, 1, 50) &&
+             isValidDateString(data.createdAt);
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['type', 'status', 'items', 'total', 'createdAt']) &&
+             (data.type == 'balcao' || data.type == 'mesa' || data.type == 'fiado') &&
+             (data.status == 'open' || data.status == 'closed') &&
+             data.items is list && data.items.size() <= 100 &&
+             isValidNumber(data.total, 0) &&
+             isValidDateString(data.createdAt) &&
+             (!('paymentMethod' in data) || (data.paymentMethod == 'dinheiro' || data.paymentMethod == 'cartao' || data.paymentMethod == 'pix')) &&
+             (!('closedAt' in data) || isValidDateString(data.closedAt)) &&
+             (!('password' in data) || data.password is number) &&
+             (!('tableNumber' in data) || data.tableNumber is number) &&
+             (!('customerName' in data) || isValidString(data.customerName, 1, 100)) &&
+             (!('cashierId' in data) || data.cashierId is string);
+    }
+
+    function isValidCashierSession(data) {
+      return data.keys().hasAll(['status', 'openedAt', 'initialBalance', 'totalSales']) &&
+             (data.status == 'open' || data.status == 'closed') &&
+             isValidDateString(data.openedAt) &&
+             isValidNumber(data.initialBalance, 0) &&
+             isValidNumber(data.totalSales, 0) &&
+             (!('closedAt' in data) || isValidDateString(data.closedAt)) &&
+             (!('finalBalance' in data) || isValidNumber(data.finalBalance, 0));
+    }
+
+    // Rules
+    match /products/{productId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidProduct(request.resource.data);
+      allow update: if isAuthenticated() && isValidProduct(request.resource.data);
+      allow delete: if isAuthenticated();
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidOrder(request.resource.data);
+      allow update: if isAuthenticated() && isValidOrder(request.resource.data);
+      allow delete: if isAuthenticated();
+    }
+
+    match /cashierSessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidCashierSession(request.resource.data);
+      allow update: if isAuthenticated() && isValidCashierSession(request.resource.data);
+      allow delete: if isAuthenticated();
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "A product available for sale",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Product name" },
+        "price": { "type": "number", "description": "Product price" },
+        "category": { "type": "string", "description": "Product category" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "price", "category", "createdAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A sales order (balcao, mesa, or fiado)",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["balcao", "mesa", "fiado"], "description": "Type of order" },
+        "status": { "type": "string", "enum": ["open", "closed"], "description": "Status of the order" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "name": { "type": "string" },
+              "price": { "type": "number" },
+              "quantity": { "type": "number" }
+            },
+            "required": ["productId", "name", "price", "quantity"]
+          }
+        },
+        "total": { "type": "number", "description": "Total amount of the order" },
+        "paymentMethod": { "type": "string", "enum": ["dinheiro", "cartao", "pix"], "description": "Payment method used" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "closedAt": { "type": "string", "format": "date-time" },
+        "password": { "type": "number", "description": "Password/ticket number for balcao" },
+        "tableNumber": { "type": "number", "description": "Table number for mesa" },
+        "customerName": { "type": "string", "description": "Customer name for fiado" },
+        "cashierId": { "type": "string", "description": "ID of the cashier session" }
+      },
+      "required": ["type", "status", "items", "total", "createdAt"]
+    },
+    "CashierSession": {
+      "title": "Cashier Session",
+      "description": "A cashier session (open/close)",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["open", "closed"] },
+        "openedAt": { "type": "string", "format": "date-time" },
+        "closedAt": { "type": "string", "format": "date-time" },
+        "initialBalance": { "type": "number" },
+        "finalBalance": { "type": "number" },
+        "totalSales": { "type": "number" }
+      },
+      "required": ["status", "openedAt", "initialBalance", "totalSales"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Products inventory"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Sales orders"
+    },
+    "/cashierSessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/CashierSession" },
+      "description": "Cashier sessions"
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "PDV Simples",
+  "description": "Aplicativo de Ponto de Venda (PDV) com controle de vendas, mesas, fiado e caixa.",
+  "requestFramePermissions": []
+}

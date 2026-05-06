@@ -334,9 +334,22 @@ export default function Fiados() {
       <tr>
         <td style="padding: 5px 0;">
           ${item.name} x${item.quantity}
-          ${item.observation ? `<br><small style="font-size: 10px; font-style: italic;">Obs: ${item.observation}</small>` : ""}
+           ${item.observation ? `<br><small style="font-size: 10px; font-style: italic;">Obs: ${item.observation}</small>` : ""}
         </td>
         <td style="text-align: right; padding: 5px 0;">R$ ${(item.price * item.quantity).toFixed(2)}</td>
+      </tr>
+    `,
+      )
+      .join("");
+
+    const productionItemsHtml = order.items
+      .map(
+        (item: any) => `
+      <tr>
+        <td style="padding: 10px 0; border-bottom: 1px dotted #000;">
+          <strong>${item.quantity}x</strong> ${item.name}
+          ${item.observation ? `<br><span style="font-size: 14px; font-weight: bold; display: block; margin-top: 5px; padding: 3px; border: 1px solid #000;">Obs: ${item.observation}</span>` : ""}
+        </td>
       </tr>
     `,
       )
@@ -355,6 +368,9 @@ export default function Fiados() {
             .footer { text-align: center; border-top: 1px dashed #000; padding-top: 10px; margin-top: 10px; }
             table { width: 100%; border-collapse: collapse; }
             .total { font-weight: bold; font-size: 14px; margin-top: 10px; display: flex; justify-content: space-between; }
+            .cut-line { border-top: 1px dashed #000; margin: 30px 0; position: relative; text-align: center; }
+            .cut-line span { background: #fff; padding: 0 5px; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); font-size: 10px; }
+            .receipt-type { text-align: center; font-weight: bold; font-size: 14px; margin-bottom: 10px; padding: 5px; border: 1px solid #000; }
             
             .no-print { display: flex; justify-content: space-between; margin-bottom: 15px; padding: 10px; background: #f3f4f6; border-radius: 8px; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
             .btn { flex: 1; padding: 12px 10px; margin: 0 5px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; text-align: center; font-size: 14px; }
@@ -365,6 +381,7 @@ export default function Fiados() {
               .no-print { display: none !important; }
               body { width: 100%; max-width: none; overflow: visible; padding: 0; margin: 0; }
               html, body { height: auto; }
+              .page-break { page-break-after: always; }
             }
           </style>
         </head>
@@ -374,9 +391,11 @@ export default function Fiados() {
             <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir</button>
           </div>
           
+          <!-- VIA DO CLIENTE -->
+          <div class="receipt-type">VIA DO CLIENTE</div>
           <div class="header">
             <h2 style="margin: 0;">PDV ALAMBARI DEFUMADOS</h2>
-            <p style="margin: 5px 0;">Data: ${format(new Date(order.closedAt), "dd/MM/yyyy HH:mm")}</p>
+            <p style="margin: 5px 0;">Data: ${format(new Date(order.closedAt || order.createdAt), "dd/MM/yyyy HH:mm")}</p>
             <h1 style="margin: 10px 0;">FIADO: ${order.customerName}</h1>
           </div>
           <table>
@@ -394,10 +413,31 @@ export default function Fiados() {
             <span>TOTAL:</span>
             <span>R$ ${order.total.toFixed(2).replace(".", ",")}</span>
           </div>
-          ${order.status === "closed" ? `<p style="margin: 5px 0;">Pagamento: ${order.paymentMethod.toUpperCase()}</p>` : '<p style="margin: 5px 0;">CONFERÊNCIA DE CONTA</p>'}
+          ${order.status === "closed" ? `<p style="margin: 5px 0;">Pagamento: ${order.paymentMethod ? order.paymentMethod.toUpperCase() : ""}</p>` : '<p style="margin: 5px 0;">CONFERÊNCIA DE CONTA</p>'}
           <div class="footer">
             <p>Obrigado pela preferência!</p>
           </div>
+
+          <div class="cut-line page-break"><span>✂-----------------------</span></div>
+
+          <!-- VIA DA PRODUÇÃO -->
+          <div class="receipt-type">VIA DA PRODUÇÃO</div>
+          <div class="header">
+            <h1 style="margin: 10px 0; font-size: 32px;">FIADO: ${order.customerName}</h1>
+            <p style="margin: 5px 0;">Data: ${format(new Date(order.closedAt || order.createdAt), "dd/MM/yyyy HH:mm")}</p>
+            ${order.observations ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold; border: 2px solid #000; padding: 5px;">OBS GERAL: ${order.observations}</p>` : ""}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align: left; border-bottom: 2px solid #000; font-size: 16px;">Itens</th>
+              </tr>
+            </thead>
+            <tbody style="font-size: 16px;">
+              ${productionItemsHtml}
+            </tbody>
+          </table>
+
           <script>
             // Dispara a impressão aguardando um pequeno tempo para carregar CSS
             setTimeout(() => { 

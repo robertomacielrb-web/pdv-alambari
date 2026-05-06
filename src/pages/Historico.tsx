@@ -131,25 +131,65 @@ export default function Historico() {
 
     const itemsHtml = order.items.map(item => `
       <tr>
-        <td style="padding: 5px 0;">${item.name} x${item.quantity}</td>
+        <td style="padding: 5px 0;">
+          ${item.name} x${item.quantity}
+          ${item.observation ? `<br><small style="font-size: 10px; font-style: italic;">Obs: ${item.observation}</small>` : ""}
+        </td>
         <td style="text-align: right; padding: 5px 0;">R$ ${(item.price * item.quantity).toFixed(2)}</td>
       </tr>
     `).join('');
 
+    const productionItemsHtml = order.items
+      .map(
+        (item: any) => `
+      <tr>
+        <td style="padding: 10px 0; border-bottom: 1px dotted #000;">
+          <strong>${item.quantity}x</strong> ${item.name}
+          ${item.observation ? `<br><span style="font-size: 14px; font-weight: bold; display: block; margin-top: 5px; padding: 3px; border: 1px solid #000;">Obs: ${item.observation}</span>` : ""}
+        </td>
+      </tr>
+    `,
+      )
+      .join("");
+
     const content = `
+      <!DOCTYPE html>
       <html>
         <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>Pedido #${order.password || order.id.slice(0, 5)}</title>
           <style>
-            body { font-family: 'Courier New', Courier, monospace; width: 80mm; margin: 0 auto; padding: 10px; font-size: 12px; }
+            html, body { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 80mm; margin: 0 auto; padding: 10px; font-size: 12px; overflow-y: auto; overflow-x: hidden; min-height: 100vh; }
             .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
             .footer { text-align: center; border-top: 1px dashed #000; padding-top: 10px; margin-top: 10px; }
             table { width: 100%; border-collapse: collapse; }
             .total { font-weight: bold; font-size: 14px; margin-top: 10px; display: flex; justify-content: space-between; }
-            @media print { body { width: 100%; } }
+            .cut-line { border-top: 1px dashed #000; margin: 30px 0; position: relative; text-align: center; }
+            .cut-line span { background: #fff; padding: 0 5px; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); font-size: 10px; }
+            .receipt-type { text-align: center; font-weight: bold; font-size: 14px; margin-bottom: 10px; padding: 5px; border: 1px solid #000; }
+            
+            .no-print { display: flex; justify-content: space-between; margin-bottom: 15px; padding: 10px; background: #f3f4f6; border-radius: 8px; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+            .btn { flex: 1; padding: 12px 10px; margin: 0 5px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; text-align: center; font-size: 14px; }
+            .btn-print { background: #10b981; color: white; }
+            .btn-close { background: #ef4444; color: white; }
+            
+            @media print { 
+              .no-print { display: none !important; }
+              body { width: 100%; max-width: none; overflow: visible; padding: 0; margin: 0; }
+              html, body { height: auto; }
+              .page-break { page-break-after: always; }
+            }
           </style>
         </head>
         <body>
+          <div class="no-print">
+            <button class="btn btn-close" onclick="window.close()">Fechar</button>
+            <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir</button>
+          </div>
+          
+          <!-- VIA DO CLIENTE -->
+          <div class="receipt-type">VIA DO CLIENTE</div>
           <div class="header">
             <h2 style="margin: 0;">PDV ALAMBARI DEFUMADOS</h2>
             <p style="margin: 5px 0;">Data: ${format(new Date(order.closedAt || order.createdAt), 'dd/MM/yyyy HH:mm')}</p>
@@ -178,7 +218,38 @@ export default function Historico() {
           <div class="footer">
             <p>Obrigado pela preferência!</p>
           </div>
-          <script>window.print(); window.close();</script>
+
+          <div class="cut-line page-break"><span>✂-----------------------</span></div>
+
+          <!-- VIA DA PRODUÇÃO -->
+          <div class="receipt-type">VIA DA PRODUÇÃO</div>
+          <div class="header">
+            ${order.password ? `<h1 style="margin: 10px 0; font-size: 32px;">SENHA: ${order.password}</h1>` : ''}
+            ${order.tableNumber ? `<h1 style="margin: 10px 0; font-size: 32px;">MESA: ${order.tableNumber}</h1>` : ''}
+            ${!order.password && !order.tableNumber && order.customerName ? `<h1 style="margin: 10px 0; font-size: 32px;">ID: ${order.customerName}</h1>` : ''}
+            
+            <p style="margin: 5px 0;">Data: ${format(new Date(order.closedAt || order.createdAt), 'dd/MM/yyyy HH:mm')}</p>
+            <p style="margin: 5px 0; font-weight: bold;">Tipo: ${order.type.toUpperCase()}</p>
+            ${order.customerName ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold;">CLIENTE: ${order.customerName}</p>` : ''}
+            ${order.observations ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold; border: 2px solid #000; padding: 5px;">OBS GERAL: ${order.observations}</p>` : ''}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align: left; border-bottom: 2px solid #000; font-size: 16px;">Itens</th>
+              </tr>
+            </thead>
+            <tbody style="font-size: 16px;">
+              ${productionItemsHtml}
+            </tbody>
+          </table>
+
+          <script>
+            setTimeout(() => { 
+                window.print(); 
+                setTimeout(() => { window.close(); }, 500);
+            }, 300);
+          </script>
         </body>
       </html>
     `;

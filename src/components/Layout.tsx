@@ -1,6 +1,5 @@
 import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
 import { 
   Calculator, 
@@ -9,12 +8,12 @@ import {
   Users, 
   Package, 
   History,
-  LogOut,
-  Menu
+  Menu,
+  ChefHat,
+  BarChart2
 } from 'lucide-react';
 
 export default function Layout() {
-  const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
   const navigation = [
@@ -22,8 +21,10 @@ export default function Layout() {
     { name: 'Balcão', href: '/balcao', icon: Store },
     { name: 'Mesas', href: '/mesas', icon: Coffee },
     { name: 'Fiados', href: '/fiados', icon: Users },
+    { name: 'Produção', href: '/producao', icon: ChefHat },
     { name: 'Produtos', href: '/produtos', icon: Package },
     { name: 'Histórico', href: '/historico', icon: History },
+    { name: 'Relatórios', href: '/relatorios', icon: BarChart2 },
   ];
 
   return (
@@ -32,7 +33,7 @@ export default function Layout() {
       <div className="md:hidden bg-gray-900 text-white p-4 flex justify-between items-center shadow-md">
         <div className="flex items-center space-x-2">
           <Store className="h-6 w-6" />
-          <span className="font-bold text-lg">PDV Simples</span>
+          <span className="font-bold text-lg">PDV Alambari Defumados</span>
         </div>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
           <Menu className="h-6 w-6" />
@@ -46,7 +47,7 @@ export default function Layout() {
       )}>
         <div className="p-4 hidden md:flex items-center space-x-2 border-b border-gray-800">
           <Store className="h-8 w-8" />
-          <span className="font-bold text-xl">PDV Simples</span>
+          <span className="font-bold text-xl">PDV Alambari Defumados</span>
         </div>
         
         <nav className="flex-1 px-2 py-4 space-y-1">
@@ -57,13 +58,22 @@ export default function Layout() {
                 key={item.name}
                 to={item.href}
                 className={({ isActive }) => cn(
-                  "group flex items-center px-2 py-2 text-sm font-medium rounded-md",
-                  isActive ? "bg-red-600 text-white" : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                  "group flex items-center px-3 py-2.5 my-0.5 text-sm font-medium transition-all duration-200 border-l-4 rounded-r-lg mr-2",
+                  isActive 
+                    ? "bg-gray-800/80 border-red-500 text-white" 
+                    : "border-transparent text-gray-400 hover:bg-gray-800/40 hover:border-gray-600 hover:text-gray-100"
                 )}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                <Icon className="mr-3 h-5 w-5 flex-shrink-0" />
-                {item.name}
+                {({ isActive }) => (
+                  <>
+                    <Icon className={cn(
+                      "mr-3 h-5 w-5 flex-shrink-0 transition-colors duration-200",
+                      isActive ? "text-red-400" : "text-gray-500 group-hover:text-gray-300"
+                    )} />
+                    {item.name}
+                  </>
+                )}
               </NavLink>
             );
           })}
@@ -71,23 +81,14 @@ export default function Layout() {
 
         <div className="p-4 border-t border-gray-800">
           <div className="flex items-center mb-4">
-            <img 
-              src={user?.photoURL || `https://ui-avatars.com/api/?name=${user?.email}`} 
-              alt="Avatar" 
-              className="h-8 w-8 rounded-full mr-3"
-            />
+            <div className="h-8 w-8 rounded-full mr-3 bg-gray-700 flex items-center justify-center">
+              <span className="text-white font-bold text-xs">U</span>
+            </div>
             <div className="text-sm truncate">
-              <p className="font-medium">{user?.displayName || 'Usuário'}</p>
-              <p className="text-gray-400 text-xs truncate">{user?.email}</p>
+              <p className="font-medium">Usuário Local</p>
+              <p className="text-gray-400 text-xs truncate">PDV</p>
             </div>
           </div>
-          <button
-            onClick={logout}
-            className="flex items-center w-full px-2 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-800 hover:text-white"
-          >
-            <LogOut className="mr-3 h-5 w-5" />
-            Sair
-          </button>
         </div>
       </div>
 

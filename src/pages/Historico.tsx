@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
-import { History, Calendar, Search, Printer, FileText, CreditCard, Banknote, QrCode } from 'lucide-react';
+import { History, Calendar, Search, Printer, FileText, CreditCard, Banknote, QrCode, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -24,6 +24,7 @@ interface Order {
   password?: number;
   tableNumber?: number;
   customerName?: string;
+  observations?: string;
   cashierId?: string;
 }
 
@@ -60,35 +61,15 @@ export default function Historico() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      let q;
-      if (selectedSessionId !== 'all') {
-        q = query(
-          collection(db, 'orders'),
-          where('status', '==', 'closed'),
-          where('cashierId', '==', selectedSessionId),
-          orderBy('closedAt', 'desc')
-        );
-      } else {
-        // Firestore doesn't support range filters on one field and equality on another easily without composite indexes
-        // For simplicity, we'll fetch closed orders and filter by date in memory if needed, 
-        // but let's try to filter by date range if possible.
-        // Note: This requires an index on status and closedAt.
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-
-        q = query(
-          collection(db, 'orders'),
-          where('status', '==', 'closed'),
-          where('closedAt', '>=', start.toISOString()),
-          where('closedAt', '<=', end.toISOString()),
-          orderBy('closedAt', 'desc')
-        );
-      }
+      // Fetch orders using a simple query to avoid composite index errors
+      const q = query(
+        collection(db, 'orders'),
+        where('status', '==', 'closed')
+      );
 
       const snapshot = await getDocs(q);
-      const fetchedOrders: Order[] = [];
+      let fetchedOrders: Order[] = [];
+      
       snapshot.forEach(doc => {
         const data = doc.data() as any;
         fetchedOrders.push({ 
@@ -103,9 +84,34 @@ export default function Historico() {
           password: data.password,
           tableNumber: data.tableNumber,
           customerName: data.customerName,
+          observations: data.observations,
           cashierId: data.cashierId
         } as Order);
       });
+
+      // Filter locally based on session or date
+      if (selectedSessionId !== 'all') {
+        fetchedOrders = fetchedOrders.filter(o => o.cashierId === selectedSessionId);
+      } else {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        
+        fetchedOrders = fetchedOrders.filter(o => {
+          if (!o.closedAt) return false;
+          const closed = new Date(o.closedAt);
+          return closed >= start && closed <= end;
+        });
+      }
+
+      // Sort locally by closedAt descending
+      fetchedOrders.sort((a, b) => {
+        const dateA = a.closedAt ? new Date(a.closedAt).getTime() : 0;
+        const dateB = b.closedAt ? new Date(b.closedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+
       setOrders(fetchedOrders);
     } catch (error) {
       console.error("Error fetching history:", error);
@@ -145,12 +151,13 @@ export default function Historico() {
         </head>
         <body>
           <div class="header">
-            <h2 style="margin: 0;">PDV SIMPLES</h2>
+            <h2 style="margin: 0;">PDV ALAMBARI DEFUMADOS</h2>
             <p style="margin: 5px 0;">Data: ${format(new Date(order.closedAt || order.createdAt), 'dd/MM/yyyy HH:mm')}</p>
             <p style="margin: 5px 0;">Tipo: ${order.type.toUpperCase()}</p>
             ${order.password ? `<h1 style="margin: 10px 0;">SENHA: ${order.password}</h1>` : ''}
             ${order.tableNumber ? `<p style="margin: 5px 0;">MESA: ${order.tableNumber}</p>` : ''}
             ${order.customerName ? `<p style="margin: 5px 0;">CLIENTE: ${order.customerName}</p>` : ''}
+            ${order.observations ? `<p style="margin: 5px 0; font-weight: bold;">OBS: ${order.observations}</p>` : ''}
           </div>
           <table>
             <thead>
@@ -321,7 +328,7 @@ export default function Historico() {
             <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
               <h2 className="text-lg font-bold">Detalhes do Pedido</h2>
               <button onClick={() => setSelectedOrder(null)} className="text-gray-500 hover:text-gray-700">
-                <Search className="w-5 h-5 rotate-45" /> {/* Using Search as a close icon replacement if X is not imported */}
+                <X className="w-6 h-6" />
               </button>
             </div>
             <div className="p-6 space-y-4">
@@ -344,13 +351,30 @@ export default function Historico() {
                 </div>
               </div>
 
+              {selectedOrder.customerName && (
+                <div className="mt-2">
+                  <p className="text-gray-500 text-sm">Cliente</p>
+                  <p className="font-medium">{selectedOrder.customerName}</p>
+                </div>
+              )}
+
+              {selectedOrder.observations && (
+                <div className="mt-2">
+                  <p className="text-gray-500 text-sm">Observações</p>
+                  <p className="font-medium text-red-700 bg-red-50 p-2 rounded text-sm border border-red-100">{selectedOrder.observations}</p>
+                </div>
+              )}
+
               <div className="border-t pt-4">
                 <p className="text-sm font-bold text-gray-700 mb-2">Itens</p>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                   {selectedOrder.items.map((item, idx) => (
-                    <div key={`${item.productId}-${idx}`} className="flex justify-between text-sm">
-                      <span>{item.name} x{item.quantity}</span>
-                      <span className="font-medium">R$ {(item.price * item.quantity).toFixed(2).replace('.', ',')}</span>
+                    <div key={`${item.productId}-${idx}`} className="flex justify-between text-sm items-center">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{item.name}</span>
+                        <span className="text-xs text-gray-500">{item.quantity}x de R$ {(item.price || 0).toFixed(2).replace('.', ',')}</span>
+                      </div>
+                      <span className="font-medium">R$ {((item.price || 0) * (item.quantity || 1)).toFixed(2).replace('.', ',')}</span>
                     </div>
                   ))}
                 </div>

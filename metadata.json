@@ -1,5 +1,6 @@
 {
-  "name": "PDV Simples",
+  "name": "PDV ALAMBARI DEFUMADOS",
   "description": "Aplicativo de Ponto de Venda (PDV) com controle de vendas, mesas, fiado e caixa.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": []
 }

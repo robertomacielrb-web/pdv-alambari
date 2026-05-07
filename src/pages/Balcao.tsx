@@ -79,14 +79,7 @@ export default function Balcao() {
       snapshot.forEach((doc) => {
         const data = doc.data();
         const normalizedCategory = data.category
-          ? data.category
-              .trim()
-              .split(/\s+/)
-              .map(
-                (w: string) =>
-                  w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
-              )
-              .join(" ")
+          ? data.category.trim()
           : "";
         prods.push({
           id: doc.id,

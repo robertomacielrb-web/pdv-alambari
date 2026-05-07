@@ -101,14 +101,7 @@ export default function Relatorios() {
         snap.forEach((doc) => {
           const data = doc.data();
           prodMap[doc.id] = data.category
-            ? data.category
-                .trim()
-                .split(/\s+/)
-                .map(
-                  (w: string) =>
-                    w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
-                )
-                .join(" ")
+            ? data.category.trim()
             : "Sem Categoria";
         });
         setProducts(prodMap);

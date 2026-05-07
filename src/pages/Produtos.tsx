@@ -27,7 +27,7 @@ export default function Produtos() {
         snapshot.forEach((doc) => {
           const data = doc.data();
           const normalizedCategory = data.category
-            ? data.category.trim().split(/\s+/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+            ? data.category.trim()
             : '';
           prods.push({ id: doc.id, ...data, category: normalizedCategory } as Product);
         });
@@ -66,7 +66,7 @@ export default function Produtos() {
       const productData = {
         name: formData.name.trim(),
         price: price,
-        category: formData.category.trim().split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '),
+        category: formData.category.trim(),
         ...(stockVal !== undefined && { stock: stockVal }),
       };
 

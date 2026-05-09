@@ -127,7 +127,8 @@ export default function Configuracoes() {
           <div>
             <p className="font-bold mb-1">Como funciona a Impressão Bluetooth?</p>
             <p>
-              Por questões de segurança dos navegadores, a conexão com dispositivos Bluetooth deve ser inicializada **sempre que você abrir a página**. O app enviará texto padronizado em formato ESC/POS para a impressora. Nem todas as impressoras bluetooth possuem a permissão habilitada para conexão web.
+              Por questões de segurança, a impressora deve ser conectada **sempre que você abrir a página**.<br/><br/>
+              <b>Atenção Celulares:</b> A Apple (iPhone/iPad) <u>bloqueia</u> totalmente o Bluetooth no navegador. No Android, costuma funcionar pelo Google Chrome. Se seu celular não suporta, selecione a <b>Impressão Padrão</b> e instale um app gerenciador de impressão da sua impressora (como o <i>RawBT</i> no Android) e compartilhe a página/PDF com ele.
             </p>
           </div>
         </div>

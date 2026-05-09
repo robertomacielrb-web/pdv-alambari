@@ -268,18 +268,29 @@ export default function Mesas() {
   const handleSaveTable = async (isAutoSave = false) => {
     if (!selectedTable) return;
 
+    // Capture state to save before we potentially clear it
+    const currentTableNumber = selectedTable;
+    const currentCart = [...cart];
+    const currentObservations = observations || "";
+    const currentCustomerName = customerName || "";
+    const currentTotal = Number(total) || 0;
+
+    if (!isAutoSave) {
+      closeTableModal();
+    }
+
     try {
       const existingOrder = openTables.find(
-        (t) => t.tableNumber === selectedTable,
+        (t) => t.tableNumber === currentTableNumber,
       );
 
       const orderData: any = {
         type: "mesa",
         status: "open",
-        tableNumber: selectedTable,
-        customerName: customerName || "",
-        observations: observations || "",
-        items: cart.map((item) => ({
+        tableNumber: currentTableNumber,
+        customerName: currentCustomerName,
+        observations: currentObservations,
+        items: currentCart.map((item) => ({
           productId: item.id || "unknown",
           name: item.name || "Produto",
           price: Number(item.price) || 0,
@@ -287,7 +298,7 @@ export default function Mesas() {
           observation: item.observation || "",
           productionStatus: item.productionStatus || "pending",
         })),
-        total: Number(total) || 0,
+        total: currentTotal,
         createdAt:
           typeof existingOrder?.createdAt === "string" &&
           existingOrder.createdAt.includes("T")
@@ -296,7 +307,7 @@ export default function Mesas() {
       };
 
       if (existingOrder) {
-        if (cart.length === 0) {
+        if (currentCart.length === 0) {
           // If cart is empty, close it with 0 total
           await updateDoc(doc(db, "orders", existingOrder.id), {
             status: "closed",
@@ -312,12 +323,9 @@ export default function Mesas() {
           });
         }
       } else {
-        if (cart.length > 0) {
+        if (currentCart.length > 0) {
           await addDoc(collection(db, "orders"), orderData);
         }
-      }
-      if (!isAutoSave) {
-        closeTableModal();
       }
     } catch (error: any) {
       if (!isAutoSave) {
@@ -339,7 +347,7 @@ export default function Mesas() {
     }, 500);
 
     return () => clearTimeout(debounceSave);
-  }, [cart, customerName, observations]);
+  }, [cart, customerName, observations, selectedTable]);
 
   const handlePrint = (order: any) => {
     const itemsHtml = order.items
@@ -732,7 +740,7 @@ export default function Mesas() {
                   <div className="absolute bottom-4 left-0 right-0 px-4 flex justify-center pointer-events-none">
                     <div className="w-full max-w-md flex gap-2 pointer-events-auto">
                       <button
-                        onClick={handleSaveTable}
+                        onClick={() => handleSaveTable()}
                         className="flex-1 bg-white text-red-600 border-2 border-red-600 py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-red-50 transition-all"
                       >
                         Salvar Mesa
@@ -944,7 +952,7 @@ export default function Mesas() {
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:gap-3">
                       <button
-                        onClick={handleSaveTable}
+                        onClick={() => handleSaveTable()}
                         className="bg-red-100 text-red-700 py-3 sm:py-4 rounded-xl font-bold text-md sm:text-lg hover:bg-red-200 transition-all border border-red-200"
                       >
                         Salvar Mesa

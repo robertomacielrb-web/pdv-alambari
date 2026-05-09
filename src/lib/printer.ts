@@ -6,7 +6,7 @@ export class BluetoothPrinter {
   async connect() {
     try {
       if (!navigator.bluetooth) {
-        throw new Error('Navegador não suporta Web Bluetooth API (use o Chrome ou Edge no PC/Android)');
+        throw new Error('Navegador não suporta Web Bluetooth API. No iPhone/iPad essa função é bloqueada pela Apple (utilize "Impressão Padrão"). Em Android, use o Chrome ou Edge.');
       }
 
       this.device = await navigator.bluetooth.requestDevice({

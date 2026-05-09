@@ -10,6 +10,7 @@ import Producao from './pages/Producao';
 import Produtos from './pages/Produtos';
 import Historico from './pages/Historico';
 import Relatorios from './pages/Relatorios';
+import Configuracoes from './pages/Configuracoes';
 
 function AppRoutes() {
   return (
@@ -23,6 +24,7 @@ function AppRoutes() {
         <Route path="produtos" element={<Produtos />} />
         <Route path="historico" element={<Historico />} />
         <Route path="relatorios" element={<Relatorios />} />
+        <Route path="configuracoes" element={<Configuracoes />} />
       </Route>
     </Routes>
   );

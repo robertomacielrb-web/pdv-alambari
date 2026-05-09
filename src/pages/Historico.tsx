@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import { History, Calendar, Search, Printer, FileText, CreditCard, Banknote, QrCode, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { executePrint } from '../lib/printHelper';
 
 interface OrderItem {
   productId: string;
@@ -126,9 +127,6 @@ export default function Historico() {
   }, [selectedSessionId, startDate, endDate]);
 
   const handlePrint = (order: Order) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
     const itemsHtml = order.items.map(item => `
       <tr>
         <td style="padding: 5px 0;">
@@ -254,8 +252,7 @@ export default function Historico() {
       </html>
     `;
 
-    printWindow.document.write(content);
-    printWindow.document.close();
+    executePrint(order, content);
   };
 
   const getPaymentIcon = (method?: string) => {

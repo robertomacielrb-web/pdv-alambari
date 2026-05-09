@@ -28,6 +28,7 @@ import {
   NotebookText,
 } from "lucide-react";
 import { format } from "date-fns";
+import { executePrint } from "../lib/printHelper";
 
 interface Product {
   id: string;
@@ -184,8 +185,7 @@ export default function Mesas() {
   };
 
   const handleUpdateCustomerName = async (newName: string) => {
-    const trimmedName = newName.trim();
-    setCustomerName(trimmedName);
+    setCustomerName(newName);
 
     if (selectedTable) {
       const existingOrder = openTables.find(
@@ -194,7 +194,7 @@ export default function Mesas() {
       if (existingOrder) {
         try {
           await updateDoc(doc(db, "orders", existingOrder.id), {
-            customerName: trimmedName,
+            customerName: newName,
           });
         } catch (error: any) {
           console.error(error);
@@ -265,7 +265,7 @@ export default function Mesas() {
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  const handleSaveTable = async () => {
+  const handleSaveTable = async (isAutoSave = false) => {
     if (!selectedTable) return;
 
     try {
@@ -297,8 +297,7 @@ export default function Mesas() {
 
       if (existingOrder) {
         if (cart.length === 0) {
-          // If cart is empty, delete the order
-          // Wait, the rules don't allow delete easily, let's just close it with 0 total
+          // If cart is empty, close it with 0 total
           await updateDoc(doc(db, "orders", existingOrder.id), {
             status: "closed",
             total: 0,
@@ -317,20 +316,32 @@ export default function Mesas() {
           await addDoc(collection(db, "orders"), orderData);
         }
       }
-      closeTableModal();
+      if (!isAutoSave) {
+        closeTableModal();
+      }
     } catch (error: any) {
-      alert(
-        "Erro ao salvar mesa: " +
-          (error.message || "Verifique os dados e tente novamente."),
-      );
+      if (!isAutoSave) {
+        alert(
+          "Erro ao salvar mesa: " +
+            (error.message || "Verifique os dados e tente novamente."),
+        );
+      }
       handleFirestoreError(error, OperationType.WRITE, "orders");
     }
   };
 
-  const handlePrint = (order: any) => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+  React.useEffect(() => {
+    if (selectedTable === null) return;
+    
+    // Auto save whenever cart, customer name or observations change
+    const debounceSave = setTimeout(() => {
+      handleSaveTable(true);
+    }, 500);
 
+    return () => clearTimeout(debounceSave);
+  }, [cart, customerName, observations]);
+
+  const handlePrint = (order: any) => {
     const itemsHtml = order.items
       .map(
         (item: any) => `
@@ -455,8 +466,7 @@ export default function Mesas() {
       </html>
     `;
 
-    printWindow.document.write(content);
-    printWindow.document.close();
+    executePrint(order, content);
   };
 
   const handleCheckout = async () => {

@@ -10,7 +10,8 @@ import {
   History,
   Menu,
   ChefHat,
-  BarChart2
+  BarChart2,
+  Settings
 } from 'lucide-react';
 
 export default function Layout() {
@@ -25,6 +26,7 @@ export default function Layout() {
     { name: 'Produtos', href: '/produtos', icon: Package },
     { name: 'Histórico', href: '/historico', icon: History },
     { name: 'Relatórios', href: '/relatorios', icon: BarChart2 },
+    { name: 'Configurações', href: '/configuracoes', icon: Settings },
   ];
 
   return (

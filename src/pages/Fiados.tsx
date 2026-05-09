@@ -26,6 +26,7 @@ import {
   Filter,
 } from "lucide-react";
 import { format } from "date-fns";
+import { executePrint } from "../lib/printHelper";
 
 interface Product {
   id: string;
@@ -318,9 +319,6 @@ export default function Fiados() {
   };
 
   const handlePrint = (order: any) => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-
     const itemsHtml = order.items
       .map(
         (item: any) => `
@@ -442,8 +440,7 @@ export default function Fiados() {
       </html>
     `;
 
-    printWindow.document.write(content);
-    printWindow.document.close();
+    executePrint(order, content);
   };
 
   const handleCheckout = async () => {
@@ -599,15 +596,15 @@ export default function Fiados() {
                       })
                     }
                     onBlur={async (e) => {
-                      const trimmedName = e.target.value.trim();
-                      if (trimmedName) {
+                      const newName = e.target.value;
+                      if (newName) {
                         try {
                           await updateDoc(doc(db, "orders", selectedFiado.id), {
-                            customerName: trimmedName,
+                            customerName: newName,
                           });
                           setSelectedFiado({
                             ...selectedFiado,
-                            customerName: trimmedName,
+                            customerName: newName,
                           });
                         } catch (error: any) {
                           console.error(error);

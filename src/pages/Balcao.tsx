@@ -24,6 +24,7 @@ import {
   Filter,
 } from "lucide-react";
 import { format } from "date-fns";
+import { executePrint } from "../lib/printHelper";
 
 interface Product {
   id: string;
@@ -167,9 +168,6 @@ export default function Balcao() {
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const handlePrint = (order: any) => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-
     const itemsHtml = order.items
       .map(
         (item: any) => `
@@ -294,8 +292,7 @@ export default function Balcao() {
       </html>
     `;
 
-    printWindow.document.write(content);
-    printWindow.document.close();
+    executePrint(order, content);
   };
 
   const handleCheckout = async () => {

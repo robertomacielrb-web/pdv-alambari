@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, updateDoc, doc, orderBy } from 'f
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { CheckCircle, Clock, Printer, ChefHat, Bell, Volume2, VolumeX } from 'lucide-react';
 import { format } from 'date-fns';
+import { executePrint } from '../lib/printHelper';
 
 interface OrderItem {
   productId: string;
@@ -144,9 +145,6 @@ export default function Producao() {
   };
 
   const handlePrint = async (order: Order) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-
     const itemsHtml = order.items.map((item) => `
       <tr>
         <td style="padding: 5px 0;"><strong>${item.quantity}x</strong> ${item.name}
@@ -179,15 +177,17 @@ export default function Producao() {
           <p style="text-align: center; margin-top: 20px; font-size: 10px; border-top: 1px dashed black; padding-top: 10px;">
             ${format(new Date(order.createdAt), 'dd/MM/yyyy HH:mm:ss')}
           </p>
+          <script>
+            setTimeout(() => { 
+                window.print(); 
+                setTimeout(() => { window.close(); }, 500);
+            }, 300);
+          </script>
         </body>
       </html>
     `;
 
-    printWindow.document.write(content);
-    printWindow.document.close();
-    printWindow.setTimeout(() => {
-      printWindow.print();
-    }, 500);
+    executePrint(order, content);
 
     // Update status to preparing
     const hasPending = order.items.some(i => i.productionStatus === 'pending');

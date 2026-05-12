@@ -158,6 +158,7 @@ export default function Producao() {
         <head>
           <title>Produção Pedido #${order.password || order.tableNumber || 'Sn'}</title>
           <style>
+            @page { margin: 0; margin-top: 2mm; }
             body { font-family: 'Courier New', Courier, monospace; width: 80mm; margin: 0 auto; padding: 10px; font-size: 14px; }
             h1 { font-size: 18px; text-align: center; margin: 0 0 10px 0; border-bottom: 1px dashed black; padding-bottom: 10px; }
             table { width: 100%; border-collapse: collapse; }
@@ -169,6 +170,7 @@ export default function Producao() {
           <div class="info">
             ${order.type === 'balcao' ? `SENHA: ${order.password}` : ''}
             ${order.type === 'mesa' ? `MESA: ${order.tableNumber}` : ''}
+            ${order.type === 'delivery' ? `DELIVERY - Cliente: ${order.customerName}` : ''}
             ${order.customerName ? `<br>Cliente: ${order.customerName}` : ''}
           </div>
           <table>
@@ -273,7 +275,9 @@ export default function Producao() {
                     <div className={`${isNew ? 'bg-red-50' : 'bg-orange-50'} border-b ${isNew ? 'border-red-100' : 'border-orange-100'} p-3 flex justify-between items-center transition-colors duration-500`}>
                       <div className="flex items-center space-x-2">
                         <span className={`${isNew ? 'bg-red-600' : 'bg-orange-600'} text-white text-xs font-bold px-2 py-1 rounded transition-colors duration-500`}>
-                          {order.type === 'balcao' ? `SENHA ${order.password}` : `MESA ${order.tableNumber}`}
+                          {order.type === 'balcao' ? `SENHA ${order.password}` : 
+                           order.type === 'mesa' ? `MESA ${order.tableNumber}` : 
+                           `DELIVERY`}
                         </span>
                         {order.customerName && (
                           <span className="text-sm font-bold text-gray-700 truncate max-w-[120px]">

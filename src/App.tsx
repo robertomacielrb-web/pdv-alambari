@@ -6,20 +6,24 @@ import Caixa from './pages/Caixa';
 import Balcao from './pages/Balcao';
 import Mesas from './pages/Mesas';
 import Fiados from './pages/Fiados';
+import Delivery from './pages/Delivery';
 import Producao from './pages/Producao';
 import Produtos from './pages/Produtos';
 import Historico from './pages/Historico';
 import Relatorios from './pages/Relatorios';
 import Configuracoes from './pages/Configuracoes';
+import Cardapio from './pages/Cardapio';
 
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/cardapio" element={<Cardapio />} />
       <Route path="/" element={<Layout />}>
         <Route index element={<Caixa />} />
         <Route path="balcao" element={<Balcao />} />
         <Route path="mesas" element={<Mesas />} />
         <Route path="fiados" element={<Fiados />} />
+        <Route path="delivery" element={<Delivery />} />
         <Route path="producao" element={<Producao />} />
         <Route path="produtos" element={<Produtos />} />
         <Route path="historico" element={<Historico />} />

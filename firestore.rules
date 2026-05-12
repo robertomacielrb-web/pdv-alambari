@@ -66,7 +66,7 @@ service cloud.firestore {
 
     function isValidOrder(data) {
       return data.keys().hasAll(['type', 'status', 'items', 'total', 'createdAt']) &&
-             (data.type == 'balcao' || data.type == 'mesa' || data.type == 'fiado') &&
+             (data.type == 'balcao' || data.type == 'mesa' || data.type == 'fiado' || data.type == 'delivery') &&
              (data.status == 'open' || data.status == 'closed') &&
              data.items is list && data.items.size() <= 100 &&
              isValidNumber(data.total, 0) &&
@@ -77,7 +77,10 @@ service cloud.firestore {
              (!('tableNumber' in data) || data.tableNumber is number) &&
              (!('customerName' in data) || data.customerName == '' || isValidString(data.customerName, 1, 100)) &&
              (!('observations' in data) || data.observations == '' || isValidString(data.observations, 1, 500)) &&
-             (!('cashierId' in data) || data.cashierId is string);
+             (!('cashierId' in data) || data.cashierId is string) &&
+             (!('deliveryFee' in data) || data.deliveryFee is number) &&
+             (!('deliveryPhone' in data) || data.deliveryPhone is string) &&
+             (!('deliveryAddress' in data) || data.deliveryAddress is string);
     }
 
     function isValidCashierSession(data) {
@@ -110,6 +113,11 @@ service cloud.firestore {
       allow create: if isValidCashierSession(request.resource.data);
       allow update: if isValidCashierSession(request.resource.data);
       allow delete: if true;
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if true;
     }
   }
 }

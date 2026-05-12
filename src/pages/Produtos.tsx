@@ -76,7 +76,10 @@ export default function Produtos() {
       }
 
       if (editingProduct) {
-        await updateDoc(doc(db, 'products', editingProduct.id), productData);
+        await updateDoc(doc(db, 'products', editingProduct.id), {
+          ...productData,
+          createdAt: editingProduct.createdAt || new Date().toISOString()
+        });
       } else {
         await addDoc(collection(db, 'products'), {
           ...productData,

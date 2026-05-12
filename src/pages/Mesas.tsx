@@ -27,6 +27,7 @@ import {
   Filter,
   NotebookText,
 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
 import { executePrint } from "../lib/printHelper";
 
@@ -192,9 +193,15 @@ export default function Mesas() {
         (t) => t.tableNumber === selectedTable,
       );
       if (existingOrder) {
+        // Optimistic update for customer name
+        setOpenTables(prev => prev.map(t => 
+           t.id === existingOrder.id ? { ...t, customerName: newName } : t
+        ));
+        
         try {
           await updateDoc(doc(db, "orders", existingOrder.id), {
             customerName: newName,
+            createdAt: existingOrder.createdAt || new Date().toISOString()
           });
         } catch (error: any) {
           console.error(error);
@@ -276,6 +283,36 @@ export default function Mesas() {
     const currentTotal = Number(total) || 0;
 
     if (!isAutoSave) {
+      // Optimistic update
+      setOpenTables(prev => {
+        const index = prev.findIndex(t => t.tableNumber === currentTableNumber);
+        if (index >= 0) {
+          if (currentCart.length === 0) {
+             return prev.filter(t => t.tableNumber !== currentTableNumber);
+          }
+          const updated = [...prev];
+          updated[index] = {
+             ...updated[index],
+             items: currentCart,
+             total: currentTotal,
+             customerName: currentCustomerName,
+             observations: currentObservations
+          };
+          return updated;
+        } else {
+          return [...prev, {
+             id: 'temp-' + Date.now(),
+             type: "mesa",
+             status: "open",
+             tableNumber: currentTableNumber,
+             items: currentCart,
+             total: currentTotal,
+             customerName: currentCustomerName,
+             observations: currentObservations,
+             createdAt: new Date().toISOString()
+          }];
+        }
+      });
       closeTableModal();
     }
 
@@ -400,6 +437,7 @@ export default function Mesas() {
             .btn-close { background: #ef4444; color: white; }
             
             @media print { 
+              @page { margin: 0; margin-top: 2mm; margin-bottom: 2mm; }
               .no-print { display: none !important; }
               body { width: 100%; max-width: none; overflow: visible; padding: 0; margin: 0; }
               html, body { height: auto; }
@@ -572,7 +610,8 @@ export default function Mesas() {
             const order = openTables.find((t) => t.tableNumber === tableNumber);
 
             return (
-              <button
+              <motion.button
+                whileTap={{ scale: 0.95 }}
                 key={`table-${tableNumber}-${index}`}
                 onClick={() => openTableModal(tableNumber)}
                 className={`p-6 rounded-lg shadow flex flex-col items-center justify-center transition-transform hover:scale-105 ${
@@ -597,7 +636,7 @@ export default function Mesas() {
                     </span>
                   </div>
                 )}
-              </button>
+              </motion.button>
             );
           },
         )}
@@ -705,7 +744,8 @@ export default function Mesas() {
                                     (item) => item.id === product.id,
                                   );
                                   return (
-                                    <button
+                                    <motion.button
+                                      whileTap={{ scale: 0.95 }}
                                       key={`prod-${product.id}-${index}`}
                                       onClick={() => addToCart(product)}
                                       className="relative border rounded-xl p-4 text-left hover:border-red-500 hover:shadow-lg transition-all bg-white flex flex-col h-full group overflow-hidden"
@@ -727,7 +767,7 @@ export default function Mesas() {
                                           </span>
                                         )}
                                       </div>
-                                    </button>
+                                    </motion.button>
                                   );
                                 })}
                             </div>
@@ -739,20 +779,22 @@ export default function Mesas() {
                   {/* Floating Next Step Button */}
                   <div className="absolute bottom-4 left-0 right-0 px-4 flex justify-center pointer-events-none">
                     <div className="w-full max-w-md flex gap-2 pointer-events-auto">
-                      <button
+                      <motion.button
+                        whileTap={{ scale: 0.95 }}
                         onClick={() => handleSaveTable()}
                         className="flex-1 bg-white text-red-600 border-2 border-red-600 py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-red-50 transition-all"
                       >
                         Salvar Mesa
-                      </button>
+                      </motion.button>
                       {cart.length > 0 && (
-                        <button
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
                           onClick={() => setStep(2)}
                           className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-red-700 transition-all flex items-center justify-center"
                         >
                           <ShoppingCart className="w-5 h-5 mr-2" />
                           Ver Carrinho
-                        </button>
+                        </motion.button>
                       )}
                     </div>
                   </div>
@@ -786,11 +828,17 @@ export default function Mesas() {
                           Mesa vazia
                         </div>
                       ) : (
-                        cart.map((item, index) => (
-                          <div
-                            key={`cart-item-${item.id}-${index}`}
-                            className="flex flex-col bg-white border border-gray-200 rounded-xl p-4 shadow-sm relative gap-3"
-                          >
+                        <AnimatePresence mode="popLayout">
+                          {cart.map((item) => (
+                            <motion.div
+                              layout
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                              key={item.id}
+                              className="flex flex-col bg-white border border-gray-200 rounded-xl p-4 shadow-sm relative gap-3"
+                            >
                             <div className="flex items-start justify-between">
                               <div className="flex-1 pr-4">
                                 <p className="font-bold text-gray-800 text-lg leading-tight">
@@ -847,8 +895,9 @@ export default function Mesas() {
                                 </button>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          </motion.div>
+                          ))}
+                        </AnimatePresence>
                       )}
                     </div>
 

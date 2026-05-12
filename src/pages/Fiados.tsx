@@ -369,6 +369,7 @@ export default function Fiados() {
             .btn-close { background: #ef4444; color: white; }
             
             @media print { 
+              @page { margin: 0; margin-top: 2mm; margin-bottom: 2mm; }
               .no-print { display: none !important; }
               body { width: 100%; max-width: none; overflow: visible; padding: 0; margin: 0; }
               html, body { height: auto; }

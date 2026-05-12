@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
-import { History, Calendar, Search, Printer, FileText, CreditCard, Banknote, QrCode, X } from 'lucide-react';
+import { History, Calendar, Search, Printer, FileText, CreditCard, Banknote, QrCode, X, MessageCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { executePrint } from '../lib/printHelper';
@@ -11,11 +11,12 @@ interface OrderItem {
   name: string;
   price: number;
   quantity: number;
+  observation?: string;
 }
 
 interface Order {
   id: string;
-  type: 'balcao' | 'mesa' | 'fiado';
+  type: 'balcao' | 'mesa' | 'fiado' | 'delivery';
   status: 'open' | 'closed';
   items: OrderItem[];
   total: number;
@@ -27,6 +28,9 @@ interface Order {
   customerName?: string;
   observations?: string;
   cashierId?: string;
+  deliveryFee?: number;
+  deliveryPhone?: string;
+  deliveryAddress?: string;
 }
 
 interface CashierSession {
@@ -86,7 +90,10 @@ export default function Historico() {
           tableNumber: data.tableNumber,
           customerName: data.customerName,
           observations: data.observations,
-          cashierId: data.cashierId
+          cashierId: data.cashierId,
+          deliveryFee: data.deliveryFee,
+          deliveryPhone: data.deliveryPhone,
+          deliveryAddress: data.deliveryAddress
         } as Order);
       });
 
@@ -173,6 +180,7 @@ export default function Historico() {
             .btn-close { background: #ef4444; color: white; }
             
             @media print { 
+              @page { margin: 0; margin-top: 2mm; margin-bottom: 2mm; }
               .no-print { display: none !important; }
               body { width: 100%; max-width: none; overflow: visible; padding: 0; margin: 0; }
               html, body { height: auto; }
@@ -355,6 +363,7 @@ export default function Historico() {
                       {order.type === 'balcao' && `Senha: ${order.password}`}
                       {order.type === 'mesa' && `Mesa ${order.tableNumber}`}
                       {order.type === 'fiado' && order.customerName}
+                      {order.type === 'delivery' && `Entrega: ${order.customerName}`}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex items-center gap-1.5">
@@ -455,7 +464,33 @@ export default function Historico() {
                 </span>
               </div>
             </div>
-            <div className="p-4 bg-gray-50 flex gap-3">
+            <div className="p-4 bg-gray-50 flex gap-2 sm:gap-3 flex-wrap">
+              {selectedOrder.type === 'delivery' && (
+                <button
+                  onClick={() => {
+                    const itemsText = selectedOrder.items
+                      .map((item: any) => `*${item.quantity}x* ${item.name} - R$ ${(item.price * item.quantity).toFixed(2).replace('.', ',')}`)
+                      .join('\n');
+                    
+                    let message = `*Olá, ${selectedOrder.customerName || 'Cliente'}!* Aqui é do Alambari Defumados 🍖\n\nSeu pedido foi confirmado!\n\n`;
+                    message += `*RESUMO DO PEDIDO:*\n${itemsText}\n\n`;
+                    message += `*Subtotal:* R$ ${(selectedOrder.total - (selectedOrder.deliveryFee || 0)).toFixed(2).replace('.', ',')}\n`;
+                    message += `*Taxa de Entrega:* R$ ${(selectedOrder.deliveryFee || 0).toFixed(2).replace('.', ',')}\n`;
+                    message += `*TOTAL:* R$ ${selectedOrder.total.toFixed(2).replace('.', ',')}\n\n`;
+                    message += `*Previsão de entrega:* 40 à 60 minutos dependendo da sua localidade.\n`;
+                    message += `Obrigado pela preferência!`;
+
+                    const phoneObj = selectedOrder.deliveryPhone ? selectedOrder.deliveryPhone.replace(/\D/g, '') : '';
+                    const phoneUrl = phoneObj.length >= 10 ? `https://wa.me/55${phoneObj}` : 'https://wa.me/';
+                    
+                    window.open(`${phoneUrl}?text=${encodeURIComponent(message)}`, '_blank');
+                  }}
+                  className="w-full sm:flex-1 bg-green-500 text-white py-2 rounded-md font-bold hover:bg-green-600 flex items-center justify-center transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Recibo WhatsApp
+                </button>
+              )}
               <button
                 onClick={() => handlePrint(selectedOrder)}
                 className="flex-1 bg-red-600 text-white py-2 rounded-md font-bold hover:bg-red-700 flex items-center justify-center"

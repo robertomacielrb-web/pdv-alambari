@@ -21,7 +21,8 @@ import {
   CreditCard,
   QrCode,
   Search,
-  Filter,
+  Truck,
+  MessageCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
@@ -44,7 +45,7 @@ interface CashierSession {
   status: string;
 }
 
-export default function Balcao() {
+export default function Delivery() {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -58,7 +59,10 @@ export default function Balcao() {
     "dinheiro" | "cartao" | "pix"
   >("dinheiro");
   const [customerName, setCustomerName] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [address, setAddress] = useState("");
   const [observations, setObservations] = useState("");
+  const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [step, setStep] = useState<1 | 2>(1);
 
   useEffect(() => {
@@ -166,7 +170,8 @@ export default function Balcao() {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = subtotal + deliveryFee;
 
   const handlePrint = (order: any) => {
     const itemsHtml = order.items
@@ -201,14 +206,14 @@ export default function Balcao() {
       <html>
         <head>
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Pedido #${order.password}</title>
+          <title>Delivery #${order.password}</title>
           <style>
             html, body { margin: 0; padding: 0; box-sizing: border-box; }
             body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 80mm; margin: 0 auto; padding: 10px; font-size: 12px; overflow-y: auto; overflow-x: hidden; min-height: 100vh; }
             .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
             .footer { text-align: center; border-top: 1px dashed #000; padding-top: 10px; margin-top: 10px; }
             table { width: 100%; border-collapse: collapse; }
-            .total { font-weight: bold; font-size: 14px; margin-top: 10px; display: flex; justify-content: space-between; }
+            .total { font-weight: bold; font-size: 14px; display: flex; justify-content: space-between; margin-bottom: 5px; }
             .cut-line { border-top: 1px dashed #000; margin: 30px 0; position: relative; text-align: center; }
             .cut-line span { background: #fff; padding: 0 5px; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); font-size: 10px; }
             .receipt-type { text-align: center; font-weight: bold; font-size: 14px; margin-bottom: 10px; padding: 5px; border: 1px solid #000; }
@@ -233,13 +238,15 @@ export default function Balcao() {
             <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir</button>
           </div>
 
-          <!-- VIA DO CLIENTE -->
-          <div class="receipt-type">VIA DO CLIENTE</div>
+          <!-- VIA DO MOTOBOY / CLIENTE -->
+          <div class="receipt-type">VIA DO MOTOBOY</div>
           <div class="header">
             <h2 style="margin: 0;">PDV ALAMBARI DEFUMADOS</h2>
             <p style="margin: 5px 0;">Data: ${format(new Date(order.closedAt), "dd/MM/yyyy HH:mm")}</p>
-            <h1 style="margin: 10px 0;">SENHA: ${order.password}</h1>
-            ${order.customerName ? `<p style="margin: 5px 0; font-size: 14px;">CLIENTE: ${order.customerName}</p>` : ""}
+            <h1 style="margin: 10px 0; font-size: 20px;">DELIVERY #${order.password}</h1>
+            ${order.customerName ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold;">CLIENTE: ${order.customerName}</p>` : ""}
+            ${order.deliveryPhone ? `<p style="margin: 5px 0; font-size: 14px;">TEL: ${order.deliveryPhone}</p>` : ""}
+            ${order.deliveryAddress ? `<p style="margin: 5px 0; font-size: 14px; border: 1px dotted #000; padding: 5px;">ENDEREÇO:<br>${order.deliveryAddress}</p>` : ""}
             ${order.observations ? `<p style="margin: 5px 0; font-weight: bold;">OBS: ${order.observations}</p>` : ""}
           </div>
           <table>
@@ -253,11 +260,20 @@ export default function Balcao() {
               ${itemsHtml}
             </tbody>
           </table>
-          <div class="total">
+          <hr style="border: 0; border-top: 1px dashed #ccc; margin: 10px 0;">
+          <div class="total" style="font-weight: normal;">
+            <span>Subtotal:</span>
+            <span>R$ ${(order.total - order.deliveryFee).toFixed(2).replace(".", ",")}</span>
+          </div>
+          <div class="total" style="font-weight: normal;">
+            <span>Taxa Entrega:</span>
+            <span>R$ ${(order.deliveryFee || 0).toFixed(2).replace(".", ",")}</span>
+          </div>
+          <div class="total" style="font-size: 16px; margin-top: 10px;">
             <span>TOTAL:</span>
             <span>R$ ${order.total.toFixed(2).replace(".", ",")}</span>
           </div>
-          <p style="margin: 5px 0;">Pagamento: ${order.paymentMethod.toUpperCase()}</p>
+          <p style="margin: 10px 0; font-size: 16px; font-weight: bold; border: 2px solid #000; padding: 5px; text-align: center;">Pagamento: ${order.paymentMethod.toUpperCase()}</p>
           <div class="footer">
             <p>Obrigado pela preferência!</p>
           </div>
@@ -267,7 +283,7 @@ export default function Balcao() {
           <!-- VIA DA PRODUÇÃO -->
           <div class="receipt-type">VIA DA PRODUÇÃO</div>
           <div class="header">
-            <h1 style="margin: 10px 0; font-size: 32px;">SENHA: ${order.password}</h1>
+            <h1 style="margin: 10px 0; font-size: 26px;">DELIVERY #${order.password}</h1>
             <p style="margin: 5px 0;">Data: ${format(new Date(order.closedAt), "dd/MM/yyyy HH:mm")}</p>
             ${order.customerName ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold;">CLIENTE: ${order.customerName}</p>` : ""}
             ${order.observations ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold; border: 2px solid #000; padding: 5px;">OBS GERAL: ${order.observations}</p>` : ""}
@@ -303,13 +319,21 @@ export default function Balcao() {
       return;
     }
     if (cart.length === 0) return;
+    if (!customerName.trim()) {
+      alert("O nome do cliente é obrigatório para entrega!");
+      return;
+    }
+    if (!address.trim()) {
+      alert("O endereço é obrigatório para entrega!");
+      return;
+    }
 
     try {
-      // Generate a random 3-digit password
+      // Generate a random 3-digit password (could act as order number)
       const password = Math.floor(100 + Math.random() * 900);
 
       const orderData = {
-        type: "balcao",
+        type: "delivery",
         status: "closed",
         items: cart.map((item) => ({
           productId: item.id || "unknown",
@@ -322,6 +346,9 @@ export default function Balcao() {
         total: Number(total) || 0,
         paymentMethod: paymentMethod || "dinheiro",
         customerName,
+        deliveryPhone: phoneNumber,
+        deliveryAddress: address,
+        deliveryFee: Number(deliveryFee) || 0,
         observations,
         createdAt: new Date().toISOString(),
         closedAt: new Date().toISOString(),
@@ -341,6 +368,9 @@ export default function Balcao() {
       setLastPassword(password);
       setCart([]);
       setCustomerName("");
+      setAddress("");
+      setPhoneNumber("");
+      setDeliveryFee(0);
       setObservations("");
       setStep(1);
     } catch (error: any) {
@@ -369,8 +399,8 @@ export default function Balcao() {
       {step === 1 && (
         <div className="flex-1 bg-white rounded-lg shadow overflow-hidden flex flex-col">
           <div className="p-4 border-b bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h2 className="text-xl font-bold text-gray-800">
-              Selecione os Produtos
+            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <Truck className="w-6 h-6 text-orange-500" /> Nova Entrega
             </h2>
 
             <div className="flex flex-1 sm:max-w-md gap-3">
@@ -383,13 +413,13 @@ export default function Balcao() {
                   placeholder="Buscar produto..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 w-full rounded-lg border-2 border-gray-200 p-2 text-sm focus:border-red-500 outline-none transition-all"
+                  className="pl-9 w-full rounded-lg border-2 border-gray-200 p-2 text-sm focus:border-orange-500 outline-none transition-all"
                 />
               </div>
             </div>
 
             {cart.length > 0 && (
-              <span className="bg-red-100 text-red-800 text-sm font-bold px-3 py-1 rounded-full whitespace-nowrap self-start sm:self-center">
+              <span className="bg-orange-100 text-orange-800 text-sm font-bold px-3 py-1 rounded-full whitespace-nowrap self-start sm:self-center">
                 {cart.reduce((acc, item) => acc + item.quantity, 0)} itens
               </span>
             )}
@@ -400,9 +430,9 @@ export default function Balcao() {
               <button
                 key={idx}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-5 py-2 rounded-full font-bold text-sm transition-all focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 ${
+                className={`px-5 py-2 rounded-full font-bold text-sm transition-all focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1 ${
                   selectedCategory === cat
-                    ? "bg-red-600 text-white shadow-md"
+                    ? "bg-orange-600 text-white shadow-md"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
@@ -438,19 +468,19 @@ export default function Balcao() {
                               whileTap={{ scale: 0.95 }}
                               key={`prod-${product.id}-${index}`}
                               onClick={() => addToCart(product)}
-                              className="relative border rounded-xl p-4 text-left hover:border-red-500 hover:shadow-lg transition-all bg-white flex flex-col h-full group overflow-hidden"
+                              className="relative border rounded-xl p-4 text-left hover:border-orange-500 hover:shadow-lg transition-all bg-white flex flex-col h-full group overflow-hidden"
                             >
-                              <div className="absolute top-0 left-0 w-full h-1 bg-red-100 group-hover:bg-red-500 transition-colors"></div>
+                              <div className="absolute top-0 left-0 w-full h-1 bg-orange-100 group-hover:bg-orange-500 transition-colors"></div>
                               <span className="font-bold text-gray-800 flex-1 text-lg leading-tight mb-2">
                                 {product.name}
                               </span>
                               <div className="flex items-center justify-between mt-auto pt-3">
-                                <span className="text-red-600 font-black text-lg">
+                                <span className="text-orange-600 font-black text-lg">
                                   R${" "}
                                   {product.price.toFixed(2).replace(".", ",")}
                                 </span>
                                 {cartItem && (
-                                  <span className="bg-red-600 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-sm">
+                                  <span className="bg-orange-600 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-sm">
                                     {cartItem.quantity}
                                   </span>
                                 )}
@@ -470,13 +500,13 @@ export default function Balcao() {
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setStep(2)}
-                className="w-full bg-red-600 text-white py-4 rounded-xl font-bold text-lg shadow-xl hover:bg-red-700 hover:shadow-2xl transition-all flex items-center justify-between px-6"
+                className="w-full bg-orange-600 text-white py-4 rounded-xl font-bold text-lg shadow-xl hover:bg-orange-700 hover:shadow-2xl transition-all flex items-center justify-between px-6"
               >
                 <div className="flex items-center">
                   <ShoppingCart className="w-6 h-6 mr-3" />
-                  <span>Ver Carrinho</span>
+                  <span>Configurar Entrega</span>
                 </div>
-                <span>R$ {total.toFixed(2).replace(".", ",")}</span>
+                <span>R$ {subtotal.toFixed(2).replace(".", ",")}</span>
               </motion.button>
             </div>
           )}
@@ -485,225 +515,240 @@ export default function Balcao() {
 
       {/* Step 2: Cart & Checkout */}
       {step === 2 && (
-        <div className="flex-1 bg-white rounded-lg shadow flex flex-col max-w-2xl mx-auto w-full">
-          <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
-            <div className="flex items-center">
-              <button
-                onClick={() => setStep(1)}
-                className="mr-4 text-gray-500 hover:text-gray-800"
-              >
-                ← Voltar
-              </button>
-              <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                <ShoppingCart className="w-6 h-6 mr-2" />
-                Revisar Pedido
-              </h2>
+        <div className="flex-1 bg-white rounded-lg shadow flex flex-col max-w-4xl mx-auto w-full md:flex-row relative">
+          <div className="flex-1 overflow-y-auto w-full md:w-[60%] border-r pb-32 md:pb-0">
+            <div className="p-4 border-b bg-gray-50 flex items-center justify-between sticky top-0 z-10">
+              <div className="flex items-center">
+                <button
+                  onClick={() => setStep(1)}
+                  className="mr-4 text-gray-500 hover:text-gray-800"
+                >
+                  ← Voltar
+                </button>
+                <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                  <ShoppingCart className="w-6 h-6 mr-2" />
+                  Pedido
+                </h2>
+              </div>
+              <span className="bg-orange-100 text-orange-800 text-sm font-bold px-3 py-1 rounded-full">
+                {cart.reduce((acc, item) => acc + item.quantity, 0)} itens
+              </span>
             </div>
-            <span className="bg-red-100 text-red-800 text-sm font-bold px-3 py-1 rounded-full">
-              {cart.reduce((acc, item) => acc + item.quantity, 0)} itens
-            </span>
-          </div>
 
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-            <div className="space-y-4 mb-8">
-              {cart.length === 0 ? (
-                <div className="text-center text-gray-500 py-12">
-                  O carrinho está vazio.
-                  <button
-                    onClick={() => setStep(1)}
-                    className="block mx-auto mt-4 text-red-600 font-bold"
-                  >
-                    Adicionar Produtos
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  {/* Grid header (visible only on md/lg screens) */}
-                  <div className="hidden md:grid md:grid-cols-12 gap-4 pb-2 border-b border-gray-200 px-2 font-bold text-gray-500 text-xs uppercase tracking-wider">
-                    <div className="col-span-5 lg:col-span-6">Produto</div>
-                    <div className="col-span-3 lg:col-span-2 text-center">Quant.</div>
-                    <div className="col-span-2 text-right">Preço Un.</div>
-                    <div className="col-span-2 text-right">Subtotal</div>
+            <div className="p-4 sm:p-6">
+              <div className="space-y-4 mb-8">
+                {cart.length === 0 ? (
+                  <div className="text-center text-gray-500 py-12">
+                    O carrinho está vazio.
                   </div>
-
-                  <AnimatePresence mode="popLayout">
-                    {cart.map((item) => (
-                      <motion.div
-                        layout
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-                        transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                        key={item.id}
-                        className="flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4 items-start md:items-center bg-white border border-gray-200 md:border-b-gray-100 md:border-x-0 md:border-t-0 rounded-xl md:rounded-none p-4 md:p-2 shadow-sm md:shadow-none"
-                      >
-                      {/* Name and Observation */}
-                      <div className="col-span-5 lg:col-span-6 w-full flex flex-col gap-2">
-                        <div className="flex justify-between md:hidden w-full mb-1">
-                           <span className="text-gray-500 text-xs font-bold uppercase tracking-wider">Produto</span>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <AnimatePresence mode="popLayout">
+                      {cart.map((item) => (
+                        <motion.div
+                          layout
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                          key={item.id}
+                          className="flex flex-col gap-3 items-start bg-white border border-gray-200 rounded-xl p-4 shadow-sm"
+                        >
+                        <div className="w-full flex justify-between items-start gap-2">
+                           <div className="flex-1 flex flex-col gap-1">
+                              <p className="font-bold text-gray-800 text-lg leading-tight flex items-center gap-2">
+                                {item.name}
+                              </p>
+                              <p className="text-gray-600 font-medium">
+                                R$ {item.price.toFixed(2).replace(".", ",")}
+                              </p>
+                           </div>
                            <button
-                              onClick={() => removeFromCart(item.id)}
-                              className="text-red-500 bg-red-50 hover:bg-red-100 p-1.5 px-3 rounded-lg flex items-center gap-1 text-xs font-bold"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" /> Remover
-                            </button>
+                             onClick={() => removeFromCart(item.id)}
+                             className="text-red-400 hover:text-red-600 p-2 rounded-lg transition-colors border border-transparent hover:bg-red-50"
+                             title="Remover"
+                           >
+                             <Trash2 className="w-5 h-5" />
+                           </button>
                         </div>
-                        <p className="font-bold text-gray-800 text-base leading-tight flex items-center gap-2">
-                          {item.name}
-                          <button
-                            onClick={() => removeFromCart(item.id)}
-                            className="hidden md:flex text-red-400 hover:text-red-600 p-1.5 rounded-lg transition-colors border border-transparent hover:border-red-100 hover:bg-red-50"
-                            title="Remover"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </p>
                         <input
                           type="text"
-                          placeholder="Observação (opcional)"
+                          placeholder="Observação (Ex: sem cebola)"
                           value={item.observation || ""}
                           onChange={(e) =>
                             updateObservation(item.id, e.target.value)
                           }
-                          className="w-full text-xs md:text-sm bg-gray-50 border border-gray-200 rounded-lg p-2 focus:ring-2 focus:ring-red-500 transition-colors outline-none h-8 md:h-9"
+                          className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg p-2 focus:ring-2 focus:ring-orange-500 outline-none"
                         />
-                      </div>
-
-                      {/* Quantity */}
-                      <div className="col-span-3 lg:col-span-2 w-full flex flex-col md:flex-row md:items-center md:justify-center">
-                        <div className="md:hidden text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Quantidade</div>
-                        <div className="flex items-center space-x-1 sm:space-x-2 bg-gray-100 p-1 md:p-1.5 rounded-lg border border-gray-200 w-auto self-start md:self-auto">
-                          <button
-                            onClick={() => updateQuantity(item.id, -1)}
-                            className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700 transition-colors"
-                          >
-                            <Minus className="w-4 h-4 sm:w-5 h-5" />
-                          </button>
-                          <span className="w-8 sm:w-10 text-center font-black text-gray-800 text-base md:text-lg">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateQuantity(item.id, 1)}
-                            className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700 transition-colors"
-                          >
-                            <Plus className="w-4 h-4 sm:w-5 h-5" />
-                          </button>
+                        <div className="w-full flex justify-between items-center mt-2 border-t pt-3 border-gray-100">
+                          <div className="flex items-center space-x-2 bg-gray-100 p-1.5 rounded-lg border border-gray-200">
+                            <button
+                              onClick={() => updateQuantity(item.id, -1)}
+                              className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700"
+                            >
+                              <Minus className="w-5 h-5" />
+                            </button>
+                            <span className="w-8 text-center font-black text-gray-800 text-lg">
+                              {item.quantity}
+                            </span>
+                            <button
+                              onClick={() => updateQuantity(item.id, 1)}
+                              className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700"
+                            >
+                              <Plus className="w-5 h-5" />
+                            </button>
+                          </div>
+                          <p className="font-black text-gray-800 text-lg">
+                            R$ {(item.price * item.quantity).toFixed(2).replace(".", ",")}
+                          </p>
                         </div>
-                      </div>
-
-                      {/* Unit Price */}
-                      <div className="col-span-2 w-full md:text-right flex items-center justify-between md:block">
-                        <span className="md:hidden text-gray-500 text-xs font-bold uppercase tracking-wider">Preço un.</span>
-                        <p className="text-gray-600 font-medium whitespace-nowrap text-right">
-                          <span className="hidden md:inline">R$ </span>{item.price.toFixed(2).replace(".", ",")}
-                        </p>
-                      </div>
-
-                      {/* Subtotal */}
-                      <div className="col-span-2 w-full md:text-right flex items-center justify-between md:block pt-3 border-t border-gray-100 md:border-none md:pt-0">
-                         <span className="md:hidden text-gray-500 text-xs font-bold uppercase tracking-wider">Subtotal</span>
-                        <p className="font-black text-gray-800 text-lg whitespace-nowrap text-right">
-                          R$ {(item.price * item.quantity).toFixed(2).replace(".", ",")}
-                        </p>
-                      </div>
-                    </motion.div>
-                  ))}
-                  </AnimatePresence>
-                </div>
-              )}
+                      </motion.div>
+                    ))}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </div>
             </div>
-
+          </div>
+          
+          <div className="w-full md:w-[40%] bg-gray-50 flex flex-col border-t md:border-t-0 md:h-full relative overflow-y-auto">
+             <div className="p-4 border-b sticky top-0 bg-gray-50 z-10 flex items-center gap-2">
+                 <Truck className="w-5 h-5 text-gray-600" />
+                 <h2 className="text-lg font-bold text-gray-800">Dados da Entrega</h2>
+             </div>
+             
             {/* Dados do Cliente e Observações */}
-            <div className="mb-6 space-y-4 border-t pt-6 bg-white shrink-0">
+            <div className="p-4 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
-                  Nome do Cliente
+                  Nome do Cliente <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Opcional"
-                  className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-gray-500 outline-none"
+                  placeholder="Nome completo ou Apelido"
+                  className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-orange-500 outline-none"
                 />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
-                  Observações no Pedido
+                  Telefone (Wpp)
+                </label>
+                <input
+                  type="text"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="(00) 00000-0000"
+                  className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-orange-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
+                  Endereço Completo <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Rua, Número, Bairro, Referência..."
+                  className="w-full border-2 border-gray-200 rounded-xl p-3 h-20 focus:border-orange-500 outline-none resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
+                  Taxa de Entrega (R$)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.50"
+                  value={deliveryFee || ""}
+                  onChange={(e) => setDeliveryFee(parseFloat(e.target.value))}
+                  placeholder="0,00"
+                  className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-orange-500 outline-none font-bold text-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
+                  Observações Gerais
                 </label>
                 <textarea
                   value={observations}
                   onChange={(e) => setObservations(e.target.value)}
-                  placeholder="Ex: sem cebola, ponto da carne, etc..."
-                  className="w-full border-2 border-gray-200 rounded-xl p-3 h-20 focus:border-gray-500 outline-none resize-none"
+                  placeholder="Ex: Levar troco, deixar na portaria..."
+                  className="w-full border-2 border-gray-200 rounded-xl p-3 h-16 focus:border-orange-500 outline-none resize-none"
                 />
               </div>
-            </div>
 
-            {/* Forma de Pagamento - Moved inside scroll area */}
-            <div className="mb-6">
-              <p className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-widest">
-                Escolha a Forma de Pagamento
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => setPaymentMethod("dinheiro")}
-                  className={`flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border-2 font-bold transition-all ${
-                    paymentMethod === "dinheiro"
-                      ? "bg-green-50 border-green-500 text-green-700 shadow-md"
-                      : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
-                  }`}
-                >
-                  <Banknote className="w-6 h-6 sm:w-8 h-8 mb-1 sm:mb-2" />
-                  <span className="text-xs sm:text-base text-center">
-                    Dinheiro
-                  </span>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod("cartao")}
-                  className={`flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border-2 font-bold transition-all ${
-                    paymentMethod === "cartao"
-                      ? "bg-red-50 border-red-500 text-red-700 shadow-md"
-                      : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
-                  }`}
-                >
-                  <CreditCard className="w-6 h-6 sm:w-8 h-8 mb-1 sm:mb-2" />
-                  <span className="text-xs sm:text-base text-center">
-                    Cartão
-                  </span>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod("pix")}
-                  className={`flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border-2 font-bold transition-all ${
-                    paymentMethod === "pix"
-                      ? "bg-purple-50 border-purple-500 text-purple-700 shadow-md"
-                      : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
-                  }`}
-                >
-                  <QrCode className="w-6 h-6 sm:w-8 h-8 mb-1 sm:mb-2" />
-                  <span className="text-xs sm:text-base text-center">PIX</span>
-                </button>
+              {/* Forma de Pagamento */}
+              <div className="pt-2">
+                <p className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-widest">
+                  Forma de Pagamento
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setPaymentMethod("dinheiro")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 font-bold transition-all ${
+                      paymentMethod === "dinheiro"
+                        ? "bg-green-50 border-green-500 text-green-700 shadow-md"
+                        : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    <Banknote className="w-5 h-5 mb-1" />
+                    <span className="text-xs text-center">Dinheiro</span>
+                  </button>
+                  <button
+                    onClick={() => setPaymentMethod("cartao")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 font-bold transition-all ${
+                      paymentMethod === "cartao"
+                        ? "bg-red-50 border-red-500 text-red-700 shadow-md"
+                        : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    <CreditCard className="w-5 h-5 mb-1" />
+                    <span className="text-xs text-center">Cartão</span>
+                  </button>
+                  <button
+                    onClick={() => setPaymentMethod("pix")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 font-bold transition-all ${
+                      paymentMethod === "pix"
+                        ? "bg-purple-50 border-purple-500 text-purple-700 shadow-md"
+                        : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    <QrCode className="w-5 h-5 mb-1" />
+                    <span className="text-xs text-center">PIX</span>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="p-4 sm:p-6 border-t bg-gray-50 flex-none shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] sm:shadow-none pb-safe">
-            <div className="flex justify-between items-center mb-4 sm:mb-6 bg-white p-3 sm:p-4 rounded-xl border shadow-sm">
-              <span className="text-gray-600 font-bold text-md sm:text-lg">
-                Total a Pagar
-              </span>
-              <span className="text-2xl sm:text-3xl font-black text-gray-800">
-                R$ {total.toFixed(2).replace(".", ",")}
-              </span>
+            <div className="p-4 border-t bg-white mt-auto sticky bottom-0 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+              <div className="flex justify-between items-center mb-2 text-gray-500 text-sm font-bold">
+                 <span>Subtotal</span>
+                 <span>R$ {subtotal.toFixed(2).replace(".", ",")}</span>
+              </div>
+              <div className="flex justify-between items-center mb-4 text-gray-500 text-sm font-bold">
+                 <span>Taxa Entrega</span>
+                 <span>R$ {(deliveryFee || 0).toFixed(2).replace(".", ",")}</span>
+              </div>
+              <div className="flex justify-between items-center mb-6 bg-gray-50 p-3 rounded-xl border shadow-sm">
+                <span className="text-gray-800 font-bold text-lg">
+                  Total
+                </span>
+                <span className="text-3xl font-black text-orange-600">
+                  R$ {total.toFixed(2).replace(".", ",")}
+                </span>
+              </div>
+              <button
+                onClick={handleCheckout}
+                disabled={cart.length === 0}
+                className="w-full bg-orange-600 text-white py-4 rounded-xl font-bold text-xl shadow-lg hover:bg-orange-700 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all"
+              >
+                <CheckCircle className="w-6 h-6 mr-2" />
+                Lançar Entrega
+              </button>
             </div>
-            <button
-              onClick={handleCheckout}
-              disabled={cart.length === 0}
-              className="w-full bg-green-600 text-white py-3 sm:py-4 rounded-xl font-bold text-lg sm:text-xl shadow-lg hover:bg-green-700 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all"
-            >
-              <CheckCircle className="w-6 h-6 sm:w-7 h-7 mr-2" />
-              Finalizar Venda
-            </button>
           </div>
         </div>
       )}
@@ -712,17 +757,43 @@ export default function Balcao() {
       {lastPassword && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-8 max-w-sm w-full text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-green-600" />
+            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-orange-600" />
             </div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">
-              Venda Concluída!
+              Delivery Lançado!
             </h2>
-            <p className="text-gray-600 mb-6">Senha do pedido:</p>
-            <div className="text-6xl font-black text-red-600 mb-8 tracking-widest">
+            <p className="text-gray-600 mb-6">ID Pedido / Senha:</p>
+            <div className="text-6xl font-black text-orange-600 mb-8 tracking-widest">
               {lastPassword}
             </div>
             <div className="space-y-3">
+              <button
+                onClick={() => {
+                  if (lastOrder) {
+                    const itemsText = lastOrder.items
+                      .map((item: any) => `*${item.quantity}x* ${item.name} - R$ ${(item.price * item.quantity).toFixed(2).replace('.', ',')}`)
+                      .join('\n');
+                    
+                    let message = `*Olá, ${lastOrder.customerName}!* Aqui é do Alambari Defumados 🍖\n\nSeu pedido foi confirmado!\n\n`;
+                    message += `*RESUMO DO PEDIDO:*\n${itemsText}\n\n`;
+                    message += `*Subtotal:* R$ ${(lastOrder.total - lastOrder.deliveryFee).toFixed(2).replace('.', ',')}\n`;
+                    message += `*Taxa de Entrega:* R$ ${lastOrder.deliveryFee.toFixed(2).replace('.', ',')}\n`;
+                    message += `*TOTAL:* R$ ${lastOrder.total.toFixed(2).replace('.', ',')}\n\n`;
+                    message += `*Previsão de entrega:* 40 à 60 minutos dependendo da sua localidade.\n`;
+                    message += `Obrigado pela preferência!`;
+
+                    const phoneObj = lastOrder.deliveryPhone ? lastOrder.deliveryPhone.replace(/\D/g, '') : '';
+                    const phoneUrl = phoneObj.length >= 10 ? `https://wa.me/55${phoneObj}` : 'https://wa.me/';
+                    
+                    window.open(`${phoneUrl}?text=${encodeURIComponent(message)}`, '_blank');
+                  }
+                }}
+                className="w-full bg-green-500 text-white py-3 rounded-lg font-bold hover:bg-green-600 flex items-center justify-center transition-colors"
+              >
+                <MessageCircle className="w-5 h-5 mr-2" />
+                Enviar Recibo (WhatsApp)
+              </button>
               <button
                 onClick={() => {
                   if (lastOrder) handlePrint(lastOrder);
@@ -737,9 +808,9 @@ export default function Balcao() {
                   setLastPassword(null);
                   setLastOrder(null);
                 }}
-                className="w-full bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700"
+                className="w-full bg-orange-600 text-white py-3 rounded-lg font-bold hover:bg-orange-700"
               >
-                Novo Pedido
+                Nova Entrega
               </button>
             </div>
           </div>

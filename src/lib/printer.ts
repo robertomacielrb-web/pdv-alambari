@@ -38,7 +38,7 @@ export class BluetoothPrinter {
     
     // Add ESC/POS init and print commands
     const initCmd = new Uint8Array([0x1B, 0x40]); // Initialize
-    const textData = encoder.encode(normalizedText + '\n\n\n\n'); 
+    const textData = encoder.encode(normalizedText + '\n\n'); 
     const cutCmd = new Uint8Array([0x1D, 0x56, 0x41, 0x00]); // Partial cut
 
     try {
@@ -108,7 +108,7 @@ export function formatOrderToText(order: any): string {
     text += `--------------------------------\n`;
   }
   text += `     Obrigado pela prefeencia!    \n`;
-  text += `--------------------------------\n\n\n`;
+  text += `--------------------------------\n\n`;
 
   // Via Producao
   text += `      VIA DA PRODUCAO - PDV     \n`;
@@ -124,9 +124,8 @@ export function formatOrderToText(order: any): string {
     if (item.observation) {
       text += `  Obs: ${item.observation}\n`;
     }
-    text += `\n`;
   }
-  text += `--------------------------------\n\n\n`;
+  text += `--------------------------------\n`;
 
   return text;
 }

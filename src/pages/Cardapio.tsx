@@ -81,6 +81,8 @@ export default function Cardapio() {
 
   const categories = ["all", ...Array.from(new Set(products.map((p) => p.category)))];
 
+  const [addedItemName, setAddedItemName] = useState<string | null>(null);
+
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
@@ -91,6 +93,11 @@ export default function Cardapio() {
       }
       return [...prev, { ...product, quantity: 1, observation: "" }];
     });
+    
+    setAddedItemName(product.name);
+    setTimeout(() => {
+      setAddedItemName(null);
+    }, 1500);
   };
 
   const updateQuantity = (id: string, delta: number) => {
@@ -440,6 +447,19 @@ export default function Cardapio() {
           </div>
         </main>
       )}
+
+      <AnimatePresence>
+        {addedItemName && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-28 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-full font-bold shadow-lg z-50 whitespace-nowrap"
+          >
+            {addedItemName} adicionado!
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Floating Action Bar */}
       {cart.length > 0 && (

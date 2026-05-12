@@ -129,18 +129,25 @@ export default function Delivery() {
     ...Array.from(new Set(products.map((p) => p.category))),
   ];
 
+  const [addedItemName, setAddedItemName] = useState<string | null>(null);
+
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
         return prev.map((item) =>
           item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? { ...item, quantity: Number(item.quantity) + 1 }
             : item,
         );
       }
       return [...prev, { ...product, quantity: 1, observation: "" }];
     });
+    
+    setAddedItemName(product.name);
+    setTimeout(() => {
+      setAddedItemName(null);
+    }, 1500);
   };
 
   const updateQuantity = (id: string, delta: number) => {
@@ -166,12 +173,21 @@ export default function Delivery() {
     );
   };
 
+  const parsedPrice = (val: any) => {
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const cleaned = val.replace(/[R$\s]/g, '').replace(',', '.');
+      return parseFloat(cleaned) || 0;
+    }
+    return 0;
+  };
+
   const removeFromCart = (id: string) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const total = subtotal + deliveryFee;
+  const subtotal = cart.reduce((sum, item) => sum + parsedPrice(item.price) * (Number(item.quantity) || 1), 0);
+  const total = subtotal + (Number(deliveryFee) || 0);
 
   const handlePrint = (order: any) => {
     const itemsHtml = order.items
@@ -182,7 +198,7 @@ export default function Delivery() {
           ${item.name} x${item.quantity}
           ${item.observation ? `<br><small style="font-size: 10px; font-style: italic;">Obs: ${item.observation}</small>` : ""}
         </td>
-        <td style="text-align: right; padding: 5px 0;">R$ ${(item.price * item.quantity).toFixed(2)}</td>
+        <td style="text-align: right; padding: 5px 0;">R$ ${(parsedPrice(item.price) * item.quantity).toFixed(2).replace('.', ',')}</td>
       </tr>
     `,
       )
@@ -338,7 +354,7 @@ export default function Delivery() {
         items: cart.map((item) => ({
           productId: item.id || "unknown",
           name: item.name || "Produto",
-          price: Number(item.price) || 0,
+          price: parsedPrice(item.price),
           quantity: Number(item.quantity) || 1,
           observation: item.observation || "",
           productionStatus: "pending",
@@ -477,7 +493,7 @@ export default function Delivery() {
                               <div className="flex items-center justify-between mt-auto pt-3">
                                 <span className="text-orange-600 font-black text-lg">
                                   R${" "}
-                                  {product.price.toFixed(2).replace(".", ",")}
+                                  {parsedPrice(product.price).toFixed(2).replace(".", ",")}
                                 </span>
                                 {cartItem && (
                                   <span className="bg-orange-600 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-sm">
@@ -493,6 +509,19 @@ export default function Delivery() {
                 ))
             )}
           </div>
+
+          <AnimatePresence>
+            {addedItemName && (
+              <motion.div
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 50 }}
+                className="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-full font-bold shadow-lg z-50 whitespace-nowrap"
+              >
+                {addedItemName} adicionado!
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Floating Next Step Button */}
           {cart.length > 0 && (
@@ -560,7 +589,7 @@ export default function Delivery() {
                                 {item.name}
                               </p>
                               <p className="text-gray-600 font-medium">
-                                R$ {item.price.toFixed(2).replace(".", ",")}
+                                R$ {parsedPrice(item.price).toFixed(2).replace(".", ",")}
                               </p>
                            </div>
                            <button
@@ -599,7 +628,7 @@ export default function Delivery() {
                             </button>
                           </div>
                           <p className="font-black text-gray-800 text-lg">
-                            R$ {(item.price * item.quantity).toFixed(2).replace(".", ",")}
+                            R$ {(parsedPrice(item.price) * item.quantity).toFixed(2).replace(".", ",")}
                           </p>
                         </div>
                       </motion.div>
@@ -772,7 +801,7 @@ export default function Delivery() {
                 onClick={() => {
                   if (lastOrder) {
                     const itemsText = lastOrder.items
-                      .map((item: any) => `*${item.quantity}x* ${item.name} - R$ ${(item.price * item.quantity).toFixed(2).replace('.', ',')}`)
+                      .map((item: any) => `*${item.quantity}x* ${item.name} - R$ ${(parsedPrice(item.price) * item.quantity).toFixed(2).replace('.', ',')}`)
                       .join('\n');
                     
                     let message = `*Olá, ${lastOrder.customerName}!* Aqui é do Alambari Defumados 🍖\n\nSeu pedido foi confirmado!\n\n`;

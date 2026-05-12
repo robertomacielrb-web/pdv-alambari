@@ -480,6 +480,7 @@ export default function Mesas() {
             <p>Obrigado pela preferência!</p>
           </div>
 
+          ${order.status === "closed" ? "" : `
           <div class="cut-line page-break"><span>✂-----------------------</span></div>
 
           <!-- VIA DA PRODUÇÃO -->
@@ -500,6 +501,7 @@ export default function Mesas() {
               ${productionItemsHtml}
             </tbody>
           </table>
+          `}
 
           <script>
             // Dispara a impressão aguardando um pequeno tempo para carregar CSS

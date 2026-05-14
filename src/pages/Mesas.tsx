@@ -266,11 +266,26 @@ export default function Mesas() {
     );
   };
 
+  const parsedPrice = (val: any) => {
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      let cleaned = val.replace(/[^\d.,]/g, '');
+      if (cleaned.includes('.') && cleaned.includes(',')) {
+         cleaned = cleaned.replace(/\./g, '');
+         cleaned = cleaned.replace(',', '.');
+      } else if (cleaned.includes(',')) {
+         cleaned = cleaned.replace(',', '.');
+      }
+      return parseFloat(cleaned) || 0;
+    }
+    return 0;
+  };
+
   const removeFromCart = (id: string) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = cart.reduce((sum, item) => sum + parsedPrice(item.price) * (Number(item.quantity) || 1), 0);
 
   const handleSaveTable = async (isAutoSave = false) => {
     if (!selectedTable) return;
@@ -330,7 +345,7 @@ export default function Mesas() {
         items: currentCart.map((item) => ({
           productId: item.id || "unknown",
           name: item.name || "Produto",
-          price: Number(item.price) || 0,
+          price: parsedPrice(item.price),
           quantity: Number(item.quantity) || 1,
           observation: item.observation || "",
           productionStatus: item.productionStatus || "pending",
@@ -395,7 +410,7 @@ export default function Mesas() {
           ${item.name} x${item.quantity}
           ${item.observation ? `<br><small style="font-size: 10px; font-style: italic;">Obs: ${item.observation}</small>` : ""}
         </td>
-        <td style="text-align: right; padding: 5px 0;">R$ ${(item.price * item.quantity).toFixed(2)}</td>
+        <td style="text-align: right; padding: 5px 0;">R$ ${(parsedPrice(item.price) * item.quantity).toFixed(2).replace('.', ',')}</td>
       </tr>
     `,
       )
@@ -544,7 +559,7 @@ export default function Mesas() {
         items: cart.map((item) => ({
           productId: item.id || "unknown",
           name: item.name || "Produto",
-          price: Number(item.price) || 0,
+          price: parsedPrice(item.price),
           quantity: Number(item.quantity) || 1,
           observation: item.observation || "",
           productionStatus: item.productionStatus || "pending",
@@ -759,7 +774,7 @@ export default function Mesas() {
                                       <div className="flex justify-between items-end w-full mt-auto pt-3">
                                         <span className="text-red-600 font-black">
                                           R${" "}
-                                          {product.price
+                                          {parsedPrice(product.price)
                                             .toFixed(2)
                                             .replace(".", ",")}
                                         </span>
@@ -847,14 +862,14 @@ export default function Mesas() {
                                   {item.name}
                                 </p>
                                 <p className="text-gray-500 text-xs font-medium mt-1">
-                                  R$ {item.price.toFixed(2).replace(".", ",")} /
+                                  R$ {parsedPrice(item.price).toFixed(2).replace(".", ",")} /
                                   un
                                 </p>
                               </div>
                               <div className="text-right">
                                 <p className="font-black text-gray-800 text-lg">
                                   R${" "}
-                                  {(item.price * item.quantity)
+                                  {(parsedPrice(item.price) * item.quantity)
                                     .toFixed(2)
                                     .replace(".", ",")}
                                 </p>

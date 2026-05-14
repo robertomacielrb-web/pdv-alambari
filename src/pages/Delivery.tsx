@@ -176,7 +176,13 @@ export default function Delivery() {
   const parsedPrice = (val: any) => {
     if (typeof val === 'number') return val;
     if (typeof val === 'string') {
-      const cleaned = val.replace(/[R$\s]/g, '').replace(',', '.');
+      let cleaned = val.replace(/[^\d.,]/g, '');
+      if (cleaned.includes('.') && cleaned.includes(',')) {
+         cleaned = cleaned.replace(/\./g, '');
+         cleaned = cleaned.replace(',', '.');
+      } else if (cleaned.includes(',')) {
+         cleaned = cleaned.replace(',', '.');
+      }
       return parseFloat(cleaned) || 0;
     }
     return 0;

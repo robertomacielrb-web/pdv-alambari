@@ -202,10 +202,7 @@ export default function Caixa() {
     }
   };
 
-  const categories = [
-    "all",
-    ...Array.from(new Set(products.map((p) => p.category))),
-  ];
+  const categories = React.useMemo(() => ["all", ...Array.from(new Set(products.map((p) => p.category)))], [products]);
 
   const filteredProducts = products.filter((p) => {
     const matchesSearch = p.name

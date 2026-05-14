@@ -124,10 +124,7 @@ export default function Delivery() {
     );
   }, [products, searchTerm, selectedCategory]);
 
-  const categories = [
-    "all",
-    ...Array.from(new Set(products.map((p) => p.category))),
-  ];
+  const categories = React.useMemo(() => ["all", ...Array.from(new Set(products.map((p) => p.category)))], [products]);
 
   const [addedItemName, setAddedItemName] = useState<string | null>(null);
 
@@ -154,7 +151,7 @@ export default function Delivery() {
     setCart((prev) =>
       prev.map((item) => {
         if (item.id === id) {
-          const newQ = item.quantity + delta;
+          const newQ = Number(item.quantity) + delta;
           return newQ > 0 ? { ...item, quantity: newQ } : item;
         }
         return item;

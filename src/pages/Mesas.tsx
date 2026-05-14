@@ -158,10 +158,7 @@ export default function Mesas() {
     );
   }, [products, searchTerm, selectedCategory]);
 
-  const categories = [
-    "all",
-    ...Array.from(new Set(products.map((p) => p.category))),
-  ];
+  const categories = React.useMemo(() => ["all", ...Array.from(new Set(products.map((p) => p.category)))], [products]);
 
   const openTableModal = (tableNumber: number) => {
     setSelectedTable(tableNumber);
@@ -219,7 +216,7 @@ export default function Mesas() {
           item.id === product.id
             ? {
                 ...item,
-                quantity: item.quantity + 1,
+                quantity: Number(item.quantity) + 1,
                 productionStatus: "pending",
               }
             : item,
@@ -241,7 +238,7 @@ export default function Mesas() {
     setCart((prev) =>
       prev.map((item) => {
         if (item.id === id) {
-          const newQ = item.quantity + delta;
+          const newQ = Number(item.quantity) + delta;
           return newQ > 0
             ? {
                 ...item,

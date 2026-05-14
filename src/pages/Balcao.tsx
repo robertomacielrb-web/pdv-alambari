@@ -125,18 +125,25 @@ export default function Balcao() {
     ...Array.from(new Set(products.map((p) => p.category))),
   ];
 
+  const [addedItemName, setAddedItemName] = useState<string | null>(null);
+
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
         return prev.map((item) =>
           item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? { ...item, quantity: Number(item.quantity) + 1 }
             : item,
         );
       }
       return [...prev, { ...product, quantity: 1, observation: "" }];
     });
+
+    setAddedItemName(product.name);
+    setTimeout(() => {
+      setAddedItemName(null);
+    }, 1500);
   };
 
   const updateQuantity = (id: string, delta: number) => {
@@ -162,11 +169,20 @@ export default function Balcao() {
     );
   };
 
+  const parsedPrice = (val: any) => {
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const cleaned = val.replace(/[R$\s]/g, '').replace(',', '.');
+      return parseFloat(cleaned) || 0;
+    }
+    return 0;
+  };
+
   const removeFromCart = (id: string) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = cart.reduce((sum, item) => sum + parsedPrice(item.price) * (Number(item.quantity) || 1), 0);
 
   const handlePrint = (order: any) => {
     const itemsHtml = order.items
@@ -177,7 +193,7 @@ export default function Balcao() {
           ${item.name} x${item.quantity}
           ${item.observation ? `<br><small style="font-size: 10px; font-style: italic;">Obs: ${item.observation}</small>` : ""}
         </td>
-        <td style="text-align: right; padding: 5px 0;">R$ ${(item.price * item.quantity).toFixed(2)}</td>
+        <td style="text-align: right; padding: 5px 0;">R$ ${(parsedPrice(item.price) * item.quantity).toFixed(2).replace(".", ",")}</td>
       </tr>
     `,
       )
@@ -314,7 +330,7 @@ export default function Balcao() {
         items: cart.map((item) => ({
           productId: item.id || "unknown",
           name: item.name || "Produto",
-          price: Number(item.price) || 0,
+          price: parsedPrice(item.price),
           quantity: Number(item.quantity) || 1,
           observation: item.observation || "",
           productionStatus: "pending",
@@ -447,7 +463,7 @@ export default function Balcao() {
                               <div className="flex items-center justify-between mt-auto pt-3">
                                 <span className="text-red-600 font-black text-lg">
                                   R${" "}
-                                  {product.price.toFixed(2).replace(".", ",")}
+                                  {parsedPrice(product.price).toFixed(2).replace(".", ",")}
                                 </span>
                                 {cartItem && (
                                   <span className="bg-red-600 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-sm">
@@ -463,6 +479,19 @@ export default function Balcao() {
                 ))
             )}
           </div>
+
+          <AnimatePresence>
+            {addedItemName && (
+              <motion.div
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 50 }}
+                className="fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-full font-bold shadow-lg z-50 whitespace-nowrap"
+              >
+                {addedItemName} adicionado!
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Floating Next Step Button */}
           {cart.length > 0 && (
@@ -595,7 +624,7 @@ export default function Balcao() {
                       <div className="col-span-2 w-full md:text-right flex items-center justify-between md:block">
                         <span className="md:hidden text-gray-500 text-xs font-bold uppercase tracking-wider">Preço un.</span>
                         <p className="text-gray-600 font-medium whitespace-nowrap text-right">
-                          <span className="hidden md:inline">R$ </span>{item.price.toFixed(2).replace(".", ",")}
+                          <span className="hidden md:inline">R$ </span>{parsedPrice(item.price).toFixed(2).replace(".", ",")}
                         </p>
                       </div>
 
@@ -603,7 +632,7 @@ export default function Balcao() {
                       <div className="col-span-2 w-full md:text-right flex items-center justify-between md:block pt-3 border-t border-gray-100 md:border-none md:pt-0">
                          <span className="md:hidden text-gray-500 text-xs font-bold uppercase tracking-wider">Subtotal</span>
                         <p className="font-black text-gray-800 text-lg whitespace-nowrap text-right">
-                          R$ {(item.price * item.quantity).toFixed(2).replace(".", ",")}
+                          R$ {(parsedPrice(item.price) * item.quantity).toFixed(2).replace(".", ",")}
                         </p>
                       </div>
                     </motion.div>

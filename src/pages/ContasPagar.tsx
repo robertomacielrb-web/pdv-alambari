@@ -146,14 +146,17 @@ export default function ContasPagar() {
   const handleToggleStatus = async (bill: Bill) => {
     try {
       const isPaid = bill.status === 'paid';
-      const updatedData = {
+      const updatedData: any = {
         status: isPaid ? 'pending' : 'paid',
         paymentDate: isPaid ? deleteField() : new Date().toISOString()
       };
       
-      const updatedModel = { ...bill, ...updatedData } as any;
-      if (isPaid) {
-        delete updatedModel.paymentDate;
+      // Ensure legacy documents conform to firestore.rules validations
+      if (!bill.createdAt) {
+        updatedData.createdAt = new Date().toISOString();
+      }
+      if (bill.dueDate && !bill.dueDate.includes('T')) {
+        updatedData.dueDate = new Date(bill.dueDate + 'T12:00:00').toISOString();
       }
 
       await updateDoc(doc(db, 'bills', bill.id), updatedData);
@@ -207,7 +210,7 @@ export default function ContasPagar() {
         category: finalCategory,
         notes: formData.notes.trim(),
         status: editingBill ? editingBill.status : 'pending',
-        createdAt: editingBill ? editingBill.createdAt : new Date().toISOString()
+        createdAt: (editingBill && editingBill.createdAt) ? editingBill.createdAt : new Date().toISOString()
       };
 
       if (editingBill) {

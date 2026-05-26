@@ -79,8 +79,23 @@ export default function ContasPagar() {
       (snapshot) => {
         const list: Bill[] = [];
         snapshot.forEach((doc) => {
-          const data = doc.data();
-          list.push({ id: doc.id, ...data } as Bill);
+          const data = doc.data() as any;
+          const rawAmount = data.amount;
+          const parsedAmount = typeof rawAmount === 'number'
+            ? rawAmount
+            : parseFloat(String(rawAmount || '0').replace(',', '.'));
+          
+          list.push({
+            id: doc.id,
+            description: data.description || 'Sem descrição',
+            amount: isNaN(parsedAmount) ? 0 : parsedAmount,
+            dueDate: data.dueDate || new Date().toISOString(),
+            status: data.status === 'paid' ? 'paid' : 'pending',
+            createdAt: data.createdAt || new Date().toISOString(),
+            category: data.category || 'Outros',
+            notes: data.notes || '',
+            paymentDate: data.paymentDate || undefined
+          });
         });
         
         // Sort by dueDate ascending, then createdAt descending
@@ -148,16 +163,16 @@ export default function ContasPagar() {
       const isPaid = bill.status === 'paid';
       const updatedData: any = {
         status: isPaid ? 'pending' : 'paid',
-        paymentDate: isPaid ? deleteField() : new Date().toISOString()
+        paymentDate: isPaid ? deleteField() : new Date().toISOString(),
+        description: bill.description || 'Sem descrição',
+        amount: typeof bill.amount === 'number' ? bill.amount : parseFloat(String(bill.amount || '0')) || 0,
+        createdAt: bill.createdAt ? bill.createdAt : new Date().toISOString(),
+        category: bill.category || 'Outros',
+        notes: bill.notes || ''
       };
       
-      // Ensure legacy documents conform to firestore.rules validations
-      if (!bill.createdAt) {
-        updatedData.createdAt = new Date().toISOString();
-      }
-      if (bill.dueDate && !bill.dueDate.includes('T')) {
-        updatedData.dueDate = new Date(bill.dueDate + 'T12:00:00').toISOString();
-      }
+      const dStr = bill.dueDate || new Date().toISOString();
+      updatedData.dueDate = dStr.includes('T') ? dStr : new Date(dStr + 'T12:00:00').toISOString();
 
       await updateDoc(doc(db, 'bills', bill.id), updatedData);
     } catch (error) {
@@ -203,6 +218,21 @@ export default function ContasPagar() {
       const due = new Date(formData.dueDate + 'T12:00:00'); // prevents timezone shifts
       const dueISO = due.toISOString();
 
+      let finalCreatedAt = new Date().toISOString();
+      if (editingBill && editingBill.createdAt) {
+        try {
+          const rawCreated = editingBill.createdAt;
+          const parsed = new Date(rawCreated.includes('T') ? rawCreated : rawCreated.replace(' ', 'T'));
+          if (!isNaN(parsed.getTime())) {
+            finalCreatedAt = parsed.toISOString();
+          } else {
+            finalCreatedAt = rawCreated;
+          }
+        } catch {
+          finalCreatedAt = editingBill.createdAt;
+        }
+      }
+
       const payData: Omit<Bill, 'id'> = {
         description: formData.description.trim(),
         amount: amountParsed,
@@ -210,7 +240,7 @@ export default function ContasPagar() {
         category: finalCategory,
         notes: formData.notes.trim(),
         status: editingBill ? editingBill.status : 'pending',
-        createdAt: (editingBill && editingBill.createdAt) ? editingBill.createdAt : new Date().toISOString()
+        createdAt: finalCreatedAt
       };
 
       if (editingBill) {

@@ -93,6 +93,18 @@ service cloud.firestore {
              (!('finalBalance' in data) || isValidNumber(data.finalBalance, 0));
     }
 
+    function isValidBill(data) {
+      return data.keys().hasAll(['description', 'amount', 'dueDate', 'status', 'createdAt']) &&
+             isValidString(data.description, 1, 200) &&
+             isValidNumber(data.amount, 0) &&
+             isValidDateString(data.dueDate) &&
+             (data.status == 'pending' || data.status == 'paid') &&
+             isValidDateString(data.createdAt) &&
+             (!('paymentDate' in data) || isValidDateString(data.paymentDate)) &&
+             (!('category' in data) || isValidString(data.category, 1, 100)) &&
+             (!('notes' in data) || data.notes == '' || isValidString(data.notes, 1, 500));
+    }
+
     // Rules
     match /products/{productId} {
       allow read: if true;
@@ -112,6 +124,13 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidCashierSession(request.resource.data);
       allow update: if isValidCashierSession(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /bills/{billId} {
+      allow read: if true;
+      allow create: if isValidBill(request.resource.data);
+      allow update: if isValidBill(request.resource.data);
       allow delete: if true;
     }
 

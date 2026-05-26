@@ -56,6 +56,22 @@
         "totalSales": { "type": "number" }
       },
       "required": ["status", "openedAt", "initialBalance", "totalSales"]
+    },
+    "Bill": {
+      "title": "Bill",
+      "description": "An account payable (conta a pagar)",
+      "type": "object",
+      "properties": {
+        "description": { "type": "string", "description": "Description of the bill" },
+        "amount": { "type": "number", "description": "Amount to pay" },
+        "dueDate": { "type": "string", "format": "date-time", "description": "Due date" },
+        "status": { "type": "string", "enum": ["pending", "paid"], "description": "Payment status" },
+        "paymentDate": { "type": "string", "format": "date-time", "description": "Payment date" },
+        "category": { "type": "string", "description": "Bill category" },
+        "notes": { "type": "string", "description": "Additional notes" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["description", "amount", "dueDate", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -70,6 +86,10 @@
     "/cashierSessions/{sessionId}": {
       "schema": { "$ref": "#/entities/CashierSession" },
       "description": "Cashier sessions"
+    },
+    "/bills/{billId}": {
+      "schema": { "$ref": "#/entities/Bill" },
+      "description": "Accounts payable (contas a pagar)"
     }
   }
 }

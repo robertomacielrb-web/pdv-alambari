@@ -13,6 +13,7 @@ import Historico from './pages/Historico';
 import Relatorios from './pages/Relatorios';
 import Configuracoes from './pages/Configuracoes';
 import Cardapio from './pages/Cardapio';
+import ContasPagar from './pages/ContasPagar';
 
 function AppRoutes() {
   return (
@@ -29,6 +30,7 @@ function AppRoutes() {
         <Route path="historico" element={<Historico />} />
         <Route path="relatorios" element={<Relatorios />} />
         <Route path="configuracoes" element={<Configuracoes />} />
+        <Route path="contas-pagar" element={<ContasPagar />} />
       </Route>
     </Routes>
   );

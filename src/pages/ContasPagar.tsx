@@ -761,21 +761,17 @@ export default function ContasPagar() {
                 </tr>
               </thead>
               <tbody id="bills-table-body" className="bg-white divide-y divide-gray-100">
-                <AnimatePresence mode="popLayout">
-                  {filteredBills.map((bill) => {
-                    const overdue = isOverdue(bill);
-                    return (
-                      <motion.tr
-                        key={bill.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className={`transition-all duration-300 border-l-4 ${
-                          overdue 
-                            ? 'bg-gradient-to-r from-red-50/90 via-rose-50/40 to-white hover:from-red-100/95 hover:via-rose-100/60 hover:to-white border-l-red-500 animate-[pulse_4s_ease-in-out_infinite]' 
-                            : 'border-l-transparent hover:bg-gray-50/50'
-                        }`}
-                      >
+                {filteredBills.map((bill) => {
+                  const overdue = isOverdue(bill);
+                  return (
+                    <tr
+                      key={bill.id}
+                      className={`transition-all duration-300 border-l-4 ${
+                        overdue 
+                          ? 'bg-gradient-to-r from-red-50/90 via-rose-50/40 to-white hover:from-red-100/95 hover:via-rose-100/60 hover:to-white border-l-red-500 animate-[pulse_4s_ease-in-out_infinite]' 
+                          : 'border-l-transparent hover:bg-gray-50/50'
+                      }`}
+                    >
                         {/* Vencimento */}
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center space-x-2">
@@ -903,10 +899,9 @@ export default function ContasPagar() {
                             </button>
                           </div>
                         </td>
-                      </motion.tr>
+                      </tr>
                     );
                   })}
-                </AnimatePresence>
               </tbody>
             </table>
           </div>

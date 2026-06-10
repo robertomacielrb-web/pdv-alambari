@@ -57,6 +57,7 @@ interface Order {
   closedAt?: string;
   paymentMethod?: string;
   customerName?: string;
+  customerPhone?: string;
   observations?: string;
 }
 
@@ -185,6 +186,7 @@ export default function Mesas() {
   }, []);
 
   const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [observations, setObservations] = useState("");
 
   const groupedProducts = React.useMemo(() => {
@@ -217,10 +219,12 @@ export default function Mesas() {
     if (existingOrder) {
       setCart(existingOrder.items);
       setCustomerName(existingOrder.customerName || "");
+      setCustomerPhone(existingOrder.customerPhone || "");
       setObservations(existingOrder.observations || "");
     } else {
       setCart([]);
       setCustomerName("");
+      setCustomerPhone("");
       setObservations("");
     }
     setStep(1);
@@ -230,6 +234,7 @@ export default function Mesas() {
     setSelectedTable(null);
     setCart([]);
     setCustomerName("");
+    setCustomerPhone("");
     setObservations("");
   };
 
@@ -343,6 +348,7 @@ export default function Mesas() {
     const currentCart = [...cart];
     const currentObservations = observations || "";
     const currentCustomerName = customerName || "";
+    const currentCustomerPhone = customerPhone || "";
     const currentTotal = Number(total) || 0;
 
     if (!isAutoSave) {
@@ -359,6 +365,7 @@ export default function Mesas() {
              items: currentCart,
              total: currentTotal,
              customerName: currentCustomerName,
+             customerPhone: currentCustomerPhone,
              observations: currentObservations
           };
           return updated;
@@ -371,6 +378,7 @@ export default function Mesas() {
              items: currentCart,
              total: currentTotal,
              customerName: currentCustomerName,
+             customerPhone: currentCustomerPhone,
              observations: currentObservations,
              createdAt: new Date().toISOString()
           }];
@@ -389,6 +397,7 @@ export default function Mesas() {
         status: "open",
         tableNumber: currentTableNumber,
         customerName: currentCustomerName,
+        customerPhone: currentCustomerPhone,
         observations: currentObservations,
         items: currentCart.map((item) => ({
           productId: item.id || "unknown",
@@ -419,6 +428,7 @@ export default function Mesas() {
             items: orderData.items,
             total: orderData.total,
             customerName: orderData.customerName,
+            customerPhone: orderData.customerPhone,
             observations: orderData.observations,
           });
         }
@@ -441,13 +451,13 @@ export default function Mesas() {
   React.useEffect(() => {
     if (selectedTable === null) return;
     
-    // Auto save whenever cart, customer name or observations change
+    // Auto save whenever cart, customer name, customer phone or observations change
     const debounceSave = setTimeout(() => {
       handleSaveTable(true);
     }, 500);
 
     return () => clearTimeout(debounceSave);
-  }, [cart, customerName, observations, selectedTable]);
+  }, [cart, customerName, customerPhone, observations, selectedTable]);
 
   const openAddTableModal = () => {
     const nextNum = tables.length > 0 ? Math.max(...tables.map((t) => t.number)) + 1 : 21;
@@ -498,6 +508,45 @@ export default function Mesas() {
         handleFirestoreError(err, OperationType.DELETE, `tables/${tableToDelete.id}`);
       }
     }
+  };
+
+  const handleSendWhatsApp = () => {
+    if (!selectedTable || cart.length === 0) return;
+
+    let msg = `*PDV ALAMBARI DEFUMADOS*\n`;
+    msg += `*CONFERÊNCIA DE CONTA - MESA ${selectedTable}*\n`;
+    if (customerName) {
+      msg += `*Cliente:* ${customerName}\n`;
+    }
+    msg += `----------------------------------\n`;
+
+    cart.forEach((item) => {
+      const itemPrice = parsedPrice(item.price);
+      const subtotal = itemPrice * item.quantity;
+      msg += `• *${item.quantity}x* ${item.name} - R$ ${subtotal.toFixed(2).replace(".", ",")}\n`;
+      if (item.observation) {
+        msg += `  _(Obs: ${item.observation})_\n`;
+      }
+    });
+
+    msg += `----------------------------------\n`;
+    msg += `*TOTAL: R$ ${total.toFixed(2).replace(".", ",")}*\n\n`;
+    msg += `Agradecemos a preferência! 🙏`;
+
+    const encodedText = encodeURIComponent(msg);
+    let whatsappUrl = "";
+
+    // Limpa o número de telefone removendo tudo que não for dígito
+    const cleanedPhone = customerPhone.replace(/\D/g, "");
+    if (cleanedPhone) {
+      // Se não possui DDI (geralmente <= 11 dígitos para celular BR), adiciona o 55 do Brasil
+      const phoneWithCountry = cleanedPhone.length <= 11 ? `55${cleanedPhone}` : cleanedPhone;
+      whatsappUrl = `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodedText}`;
+    } else {
+      whatsappUrl = `https://api.whatsapp.com/send?text=${encodedText}`;
+    }
+
+    window.open(whatsappUrl, "_blank");
   };
 
   const handlePrint = (order: any) => {
@@ -674,6 +723,10 @@ export default function Mesas() {
 
       if (customerName || isFiado) {
         orderUpdatePayload.customerName = customerName || "Cliente Fiado";
+      }
+
+      if (customerPhone) {
+        orderUpdatePayload.customerPhone = customerPhone;
       }
 
       if (!isFiado) {
@@ -1049,17 +1102,31 @@ export default function Mesas() {
 
                     {/* Dados do Cliente e Observações */}
                     <div className="mb-6 space-y-4 border-t pt-6 bg-white shrink-0">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
-                          Nome do Cliente
-                        </label>
-                        <input
-                          type="text"
-                          value={customerName}
-                          onChange={(e) => setCustomerName(e.target.value)}
-                          placeholder="Opcional"
-                          className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-gray-500 outline-none"
-                        />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
+                            Nome do Cliente
+                          </label>
+                          <input
+                            type="text"
+                            value={customerName}
+                            onChange={(e) => setCustomerName(e.target.value)}
+                            placeholder="Opcional"
+                            className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-gray-500 outline-none pb-3 pt-3 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
+                            WhatsApp do Cliente
+                          </label>
+                          <input
+                            type="text"
+                            value={customerPhone}
+                            onChange={(e) => setCustomerPhone(e.target.value)}
+                            placeholder="Ex: 11999999999 (DDD + Número)"
+                            className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-gray-500 outline-none pb-3 pt-3 text-sm"
+                          />
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
@@ -1137,6 +1204,16 @@ export default function Mesas() {
                   </div>
 
                   <div className="p-4 sm:p-6 border-t bg-gray-50 flex-none shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] sm:shadow-none pb-safe">
+                    <button
+                      onClick={handleSendWhatsApp}
+                      disabled={cart.length === 0}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-3 sm:py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 mb-4 shrink-0 cursor-pointer"
+                    >
+                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                        <path d="M12.004 2c-5.51 0-9.993 4.483-9.993 9.993 0 1.763.457 3.49 1.332 5.013l-1.343 4.905 5.022-1.317c1.464.798 3.107 1.219 4.815 1.22 5.51 0 9.993-4.483 9.993-9.993C21.99 6.483 17.514 2 12.004 2zm6.182 14.126c-.255.725-1.025.1-1.3.1-2.31-1.764-2.22-.387-2.67-1.127.1-.258.261-.518.57-.86.919-.341.353-.618.396-1.127.143-.51-.254-2.148-.792-4.094-2.528-1.513-1.35-2.536-3.017-2.833-3.526-.297-.51-.031-.785.224-1.039.231-.228.51-.594.765-.89h.1c.17 0 .255.085.34.254.17.34.595 1.442.637 1.528.043.085.085.17.022.296-.064.128-.106.213-.213.34-.106.127-.223.212-.318.339-.096.126-.181.254-.085.424.096.17.425.702.914 1.139.63.565 1.162.934 1.714 1.189.51.254.786.19 1.062-.085.277-.275 1.211-1.4 1.53-1.887.085-.127.213-.17.34-.127.128.042.829.39 1.573.763.51.254.851.382.957.551.106.17.106.977-.149 1.702z"/>
+                      </svg>
+                      Enviar Conta por WhatsApp
+                    </button>
                     <div className="flex justify-between items-center mb-4 sm:mb-6 bg-white p-3 sm:p-4 rounded-xl border shadow-sm">
                       <span className="text-gray-600 font-bold text-md sm:text-lg">
                         Total a Pagar

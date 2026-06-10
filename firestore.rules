@@ -80,6 +80,7 @@ service cloud.firestore {
              (!('password' in data) || data.password is number) &&
              (!('tableNumber' in data) || data.tableNumber is number) &&
              (!('customerName' in data) || data.customerName == '' || isValidString(data.customerName, 1, 100)) &&
+             (!('customerPhone' in data) || data.customerPhone is string) &&
              (!('observations' in data) || data.observations == '' || isValidString(data.observations, 1, 500)) &&
              (!('cashierId' in data) || data.cashierId is string) &&
              (!('deliveryFee' in data) || data.deliveryFee is number) &&

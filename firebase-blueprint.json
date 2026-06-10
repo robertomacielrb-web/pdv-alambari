@@ -49,6 +49,7 @@
         "password": { "type": "number", "description": "Password/ticket number for balcao" },
         "tableNumber": { "type": "number", "description": "Table number for mesa" },
         "customerName": { "type": "string", "description": "Customer name for fiado" },
+        "customerPhone": { "type": "string", "description": "WhatsApp phone number of the customer" },
         "cashierId": { "type": "string", "description": "ID of the cashier session" }
       },
       "required": ["type", "status", "items", "total", "createdAt"]

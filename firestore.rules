@@ -109,6 +109,12 @@ service cloud.firestore {
              (!('notes' in data) || data.notes == '' || isValidString(data.notes, 1, 500));
     }
 
+    function isValidTable(data) {
+      return data.keys().hasAll(['number']) &&
+             data.number is number && data.number > 0 &&
+             (!('createdAt' in data) || data.createdAt is string);
+    }
+
     // Rules
     match /products/{productId} {
       allow read: if true;
@@ -135,6 +141,13 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidBill(request.resource.data);
       allow update: if isValidBill(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /tables/{tableId} {
+      allow read: if true;
+      allow create: if isValidTable(request.resource.data);
+      allow update: if isValidTable(request.resource.data);
       allow delete: if true;
     }
 

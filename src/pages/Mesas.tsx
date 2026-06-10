@@ -9,6 +9,8 @@ import {
   updateDoc,
   doc,
   increment,
+  setDoc,
+  deleteDoc,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import {
@@ -63,6 +65,12 @@ interface CashierSession {
   status: string;
 }
 
+interface Table {
+  id: string;
+  number: number;
+  createdAt?: string;
+}
+
 export default function Mesas() {
   const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
@@ -79,7 +87,9 @@ export default function Mesas() {
   >("dinheiro");
   const [step, setStep] = useState<1 | 2>(1);
 
-  const totalTables = 20;
+  const [tables, setTables] = useState<Table[]>([]);
+  const [isAddTableModalOpen, setIsAddTableModalOpen] = useState(false);
+  const [newTableNumber, setNewTableNumber] = useState("");
 
   useEffect(() => {
     // Get open cashier session
@@ -93,6 +103,8 @@ export default function Mesas() {
       } else {
         setCurrentSession(null);
       }
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, "cashierSessions");
     });
 
     // Get products
@@ -110,6 +122,8 @@ export default function Mesas() {
         } as Product);
       });
       setProducts(prods);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, "products");
     });
 
     // Get open tables
@@ -124,12 +138,49 @@ export default function Mesas() {
         tables.push({ id: doc.id, ...doc.data() } as Order),
       );
       setOpenTables(tables);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, "orders");
+    });
+
+    // Get customized tables
+    const unsubTablesList = onSnapshot(collection(db, "tables"), async (snapshot) => {
+      if (snapshot.empty) {
+        const initialList: Table[] = [];
+        for (let i = 1; i <= 20; i++) {
+          initialList.push({ id: `mesa-${i}`, number: i });
+        }
+        setTables(initialList);
+        
+        // Seeding the initial 1-20 tables in firestore safely
+        for (let i = 1; i <= 20; i++) {
+          try {
+            await setDoc(doc(db, "tables", `mesa-${i}`), {
+              number: i,
+              createdAt: new Date().toISOString()
+            });
+          } catch (err: any) {
+            console.error(`Erro ao semear mesa-${i}: `, err);
+            handleFirestoreError(err, OperationType.CREATE, `tables/mesa-${i}`);
+          }
+        }
+      } else {
+        const list: Table[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          list.push({ id: doc.id, number: Number(data.number) });
+        });
+        setTables(list.sort((a, b) => a.number - b.number));
+      }
+    }, (err) => {
+      console.error("Erro ao ouvir mesas: ", err);
+      handleFirestoreError(err, OperationType.GET, "tables");
     });
 
     return () => {
       unsubSession();
       unsubProducts();
       unsubTables();
+      unsubTablesList();
     };
   }, []);
 
@@ -398,6 +449,57 @@ export default function Mesas() {
     return () => clearTimeout(debounceSave);
   }, [cart, customerName, observations, selectedTable]);
 
+  const openAddTableModal = () => {
+    const nextNum = tables.length > 0 ? Math.max(...tables.map((t) => t.number)) + 1 : 21;
+    setNewTableNumber(String(nextNum));
+    setIsAddTableModalOpen(true);
+  };
+
+  const handleAddTableSubmit = async () => {
+    const num = parseInt(newTableNumber.trim(), 10);
+    if (isNaN(num) || num <= 0) {
+      alert("Por favor, insira um número de mesa válido e maior que zero.");
+      return;
+    }
+
+    const exists = tables.some((t) => t.number === num);
+    if (exists) {
+      alert(`A Mesa ${num} já existe no sistema!`);
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, "tables", `mesa-${num}`), {
+        number: num,
+        createdAt: new Date().toISOString(),
+      });
+      setIsAddTableModalOpen(false);
+      setNewTableNumber("");
+    } catch (err: any) {
+      console.error("Erro ao adicionar mesa: ", err);
+      handleFirestoreError(err, OperationType.CREATE, `tables/mesa-${num}`);
+    }
+  };
+
+  const handleDeleteTable = async (tableToDelete: Table, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    const isOpen = openTables.some((t) => t.tableNumber === tableToDelete.number);
+    if (isOpen) {
+      alert("Não é possível excluir esta mesa porque ela tem um atendimento em aberto!");
+      return;
+    }
+
+    if (confirm(`Deseja mesmo remover a Mesa ${tableToDelete.number}?`)) {
+      try {
+        await deleteDoc(doc(db, "tables", tableToDelete.id));
+      } catch (err: any) {
+        console.error("Erro ao deletar mesa: ", err);
+        handleFirestoreError(err, OperationType.DELETE, `tables/${tableToDelete.id}`);
+      }
+    }
+  };
+
   const handlePrint = (order: any) => {
     const itemsHtml = order.items
       .map(
@@ -613,22 +715,40 @@ export default function Mesas() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Mesas</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Mesas</h1>
+          <p className="text-gray-500 text-sm">Gerencie o consumo das mesas e adicione novas conforme necessário</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            id="add-new-table-btn"
+            onClick={openAddTableModal}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2.5 rounded-lg shadow transition-colors text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Nova Mesa
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {Array.from({ length: totalTables }, (_, i) => i + 1).map(
-          (tableNumber, index) => {
-            const isOpen = openTables.some(
-              (t) => t.tableNumber === tableNumber,
-            );
-            const order = openTables.find((t) => t.tableNumber === tableNumber);
+        {tables.map((table, index) => {
+          const isOpen = openTables.some(
+            (t) => t.tableNumber === table.number,
+          );
+          const order = openTables.find((t) => t.tableNumber === table.number);
 
-            return (
+          return (
+            <div 
+              key={`table-wrapper-${table.number}-${index}`}
+              className="relative group animate-[fadeIn_0.3s_ease-out]"
+            >
               <motion.button
                 whileTap={{ scale: 0.95 }}
-                key={`table-${tableNumber}-${index}`}
-                onClick={() => openTableModal(tableNumber)}
-                className={`p-6 rounded-lg shadow flex flex-col items-center justify-center transition-transform hover:scale-105 ${
+                id={`table-card-${table.number}`}
+                onClick={() => openTableModal(table.number)}
+                className={`w-full p-6 rounded-lg shadow flex flex-col items-center justify-center transition-transform hover:scale-105 min-h-[140px] ${
                   isOpen
                     ? "bg-red-600 text-white"
                     : "bg-white text-gray-800 hover:bg-gray-50"
@@ -637,23 +757,35 @@ export default function Mesas() {
                 <Coffee
                   className={`w-8 h-8 mb-2 ${isOpen ? "text-white" : "text-gray-400"}`}
                 />
-                <span className="font-bold text-lg">Mesa {tableNumber}</span>
+                <span className="font-bold text-lg">Mesa {table.number}</span>
                 {isOpen && order && (
-                  <div className="flex flex-col items-center">
+                  <div className="flex flex-col items-center w-full">
                     {order.customerName && (
-                      <span className="text-sm font-medium text-red-100 truncate w-full px-2 text-center">
+                      <span className="text-xs font-medium text-red-100 truncate w-full px-2 text-center block max-w-full">
                         {order.customerName}
                       </span>
                     )}
-                    <span className="text-sm mt-1 bg-red-700 px-2 py-1 rounded text-white shadow-sm font-bold">
+                    <span className="text-xs mt-1 bg-red-700 px-2 py-1 rounded text-white shadow-sm font-bold">
                       R$ {order.total.toFixed(2).replace(".", ",")}
                     </span>
                   </div>
                 )}
               </motion.button>
-            );
-          },
-        )}
+
+              {/* Delete Table Button - only available if the table is closed */}
+              {!isOpen && (
+                <button
+                  id={`delete-table-btn-${table.number}`}
+                  onClick={(e) => handleDeleteTable(table, e)}
+                  title={`Excluir Mesa ${table.number}`}
+                  className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 shadow-sm border border-red-200 z-10"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {selectedTable && (
@@ -1040,6 +1172,66 @@ export default function Mesas() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Table Dialog Modal */}
+      {isAddTableModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6 animate-[fadeIn_0.2s_ease-out]">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg text-gray-800">Criar Nova Mesa</h3>
+              <button
+                onClick={() => {
+                  setIsAddTableModalOpen(false);
+                  setNewTableNumber("");
+                }}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <p className="text-sm text-gray-500 mb-4">
+              Defina o número da nova mesa. O sistema sugere o próximo disponível automaticamente.
+            </p>
+            
+            <div className="mb-4">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                Número da Mesa
+              </label>
+              <input
+                id="new-table-number-input"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="Ex: 21"
+                value={newTableNumber}
+                onChange={(e) => setNewTableNumber(e.target.value)}
+                className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-red-500 outline-none text-lg font-bold"
+              />
+            </div>
+            
+            <div className="flex gap-2">
+              <button
+                id="cancel-add-table-btn"
+                onClick={() => {
+                  setIsAddTableModalOpen(false);
+                  setNewTableNumber("");
+                }}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-xl transition-colors text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                id="confirm-add-table-btn"
+                onClick={handleAddTableSubmit}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl shadow transition-colors text-sm"
+              >
+                Adicionar
+              </button>
             </div>
           </div>
         </div>

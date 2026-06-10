@@ -1,5 +1,15 @@
 {
   "entities": {
+    "Table": {
+      "title": "Table",
+      "description": "A table in the establishment",
+      "type": "object",
+      "properties": {
+        "number": { "type": "number", "description": "The table number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["number"]
+    },
     "Product": {
       "title": "Product",
       "description": "A product available for sale",
@@ -90,6 +100,10 @@
     "/bills/{billId}": {
       "schema": { "$ref": "#/entities/Bill" },
       "description": "Accounts payable (contas a pagar)"
+    },
+    "/tables/{tableId}": {
+      "schema": { "$ref": "#/entities/Table" },
+      "description": "Establishment seating tables"
     }
   }
 }

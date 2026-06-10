@@ -105,12 +105,12 @@ export default function Configuracoes() {
               <input
                 type="text"
                 readOnly
-                value={`${window.location.origin}/cardapio`}
+                value={`${window.location.origin}/#/cardapio`}
                 className="flex-1 border-2 border-gray-200 bg-gray-50 rounded-lg p-3 text-sm outline-none text-gray-500"
               />
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/cardapio`);
+                  navigator.clipboard.writeText(`${window.location.origin}/#/cardapio`);
                   alert('Link copiado!');
                 }}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 p-3 rounded-lg border-2 border-gray-200 transition-colors"
@@ -119,7 +119,7 @@ export default function Configuracoes() {
                 <Copy className="w-5 h-5" />
               </button>
               <a
-                href="/cardapio"
+                href="#/cardapio"
                 target="_blank"
                 rel="noreferrer"
                 className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 p-3 rounded-lg border-2 border-indigo-100 transition-colors"

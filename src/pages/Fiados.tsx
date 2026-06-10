@@ -154,7 +154,10 @@ export default function Fiados() {
 
   const openFiadoModal = (fiado: Order) => {
     setSelectedFiado(fiado);
-    setCart(fiado.items);
+    setCart((fiado.items || []).map((item: any) => ({
+      ...item,
+      id: item.id || item.productId || "unknown",
+    })));
   };
 
   const closeFiadoModal = () => {

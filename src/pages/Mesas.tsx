@@ -217,7 +217,10 @@ export default function Mesas() {
     setSelectedTable(tableNumber);
     const existingOrder = openTables.find((t) => t.tableNumber === tableNumber);
     if (existingOrder) {
-      setCart(existingOrder.items);
+      setCart((existingOrder.items || []).map((item: any) => ({
+        ...item,
+        id: item.id || item.productId || "unknown",
+      })));
       setCustomerName(existingOrder.customerName || "");
       setCustomerPhone(existingOrder.customerPhone || "");
       setObservations(existingOrder.observations || "");

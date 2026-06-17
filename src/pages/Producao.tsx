@@ -159,7 +159,7 @@ export default function Producao() {
           <title>Produção Pedido #${order.password || order.tableNumber || 'Sn'}</title>
           <style>
             @page { margin: 0; margin-top: 2mm; }
-            body { font-family: 'Courier New', Courier, monospace; width: 80mm; margin: 0 auto; padding: 10px; font-size: 14px; }
+            body { font-family: 'Courier New', Courier, monospace; width: 80mm; margin: 0 auto; padding: 10px; font-size: 15px; font-weight: bold; }
             h1 { font-size: 18px; text-align: center; margin: 0 0 10px 0; border-bottom: 1px dashed black; padding-bottom: 10px; }
             table { width: 100%; border-collapse: collapse; }
             .info { text-align: center; margin-bottom: 20px; font-weight: bold; }

@@ -223,7 +223,7 @@ export default function Balcao() {
           <title>Pedido #${order.password}</title>
           <style>
             html, body { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 80mm; margin: 0 auto; padding: 10px; font-size: 12px; overflow-y: auto; overflow-x: hidden; min-height: 100vh; }
+            body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 80mm; margin: 0 auto; padding: 10px; font-size: 13px; font-weight: bold; overflow-y: auto; overflow-x: hidden; min-height: 100vh; }
             .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
             .footer { text-align: center; border-top: 1px dashed #000; padding-top: 10px; margin-top: 10px; }
             table { width: 100%; border-collapse: collapse; }

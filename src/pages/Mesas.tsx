@@ -12,7 +12,7 @@ import {
   setDoc,
   deleteDoc,
 } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../firebase";
+import { db, handleFirestoreError, OperationType, getNextPassword } from "../firebase";
 import {
   Coffee,
   Plus,
@@ -53,6 +53,7 @@ interface Order {
   tableNumber: number;
   items: CartItem[];
   total: number;
+  password?: number;
   createdAt?: string;
   closedAt?: string;
   paymentMethod?: string;
@@ -735,6 +736,7 @@ export default function Mesas() {
       if (!isFiado) {
         orderUpdatePayload.paymentMethod = paymentMethod;
         orderUpdatePayload.closedAt = new Date().toISOString();
+        orderUpdatePayload.password = existingOrder?.password || await getNextPassword(currentSession.id);
       }
 
       const orderData = orderUpdatePayload;

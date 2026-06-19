@@ -76,3 +76,24 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
+
+import { runTransaction } from 'firebase/firestore';
+
+export async function getNextPassword(cashierId: string): Promise<number> {
+  if (!cashierId || cashierId === "unknown") return Math.floor(1 + Math.random() * 999);
+  
+  try {
+    const cashierRef = doc(db, "cashierSessions", cashierId);
+    return await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(cashierRef);
+      if (!docSnap.exists()) return Math.floor(1 + Math.random() * 999);
+      const data = docSnap.data();
+      const newCounter = (data.passwordCounter || 0) + 1;
+      transaction.update(cashierRef, { passwordCounter: newCounter });
+      return newCounter;
+    });
+  } catch (e) {
+    console.error("Error generating sequential password", e);
+    return Math.floor(1 + Math.random() * 999);
+  }
+}

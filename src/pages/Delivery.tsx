@@ -9,7 +9,7 @@ import {
   doc,
   increment,
 } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../firebase";
+import { db, handleFirestoreError, OperationType, getNextPassword } from "../firebase";
 import {
   ShoppingCart,
   Plus,
@@ -348,8 +348,7 @@ export default function Delivery() {
     }
 
     try {
-      // Generate a random 3-digit password (could act as order number)
-      const password = Math.floor(100 + Math.random() * 900);
+      const password = await getNextPassword(currentSession.id);
 
       const orderData = {
         type: "delivery",

@@ -10,7 +10,7 @@ import {
   increment,
   deleteDoc,
 } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../firebase";
+import { db, handleFirestoreError, OperationType, getNextPassword } from "../firebase";
 import {
   Users,
   Plus,
@@ -48,6 +48,7 @@ interface Order {
   customerName: string;
   items: CartItem[];
   total: number;
+  password?: number;
   createdAt?: string;
   closedAt?: string;
   paymentMethod?: string;
@@ -452,7 +453,10 @@ export default function Fiados() {
     if (!selectedFiado) return;
 
     try {
+      const password = selectedFiado.password || await getNextPassword(currentSession.id);
+
       const orderData = {
+        password,
         status: "closed",
         closedAt: new Date().toISOString(),
         cashierId: currentSession.id || "unknown",

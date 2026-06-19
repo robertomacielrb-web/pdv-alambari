@@ -151,6 +151,7 @@ export default function Caixa() {
         openedAt: new Date().toISOString(),
         initialBalance,
         totalSales: 0,
+        passwordCounter: 0,
       });
       setInitialBalanceInput("");
     } catch (error) {

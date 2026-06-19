@@ -9,7 +9,7 @@ import {
   doc,
   increment,
 } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../firebase";
+import { db, handleFirestoreError, OperationType, getNextPassword } from "../firebase";
 import {
   ShoppingCart,
   Plus,
@@ -324,8 +324,7 @@ export default function Balcao() {
     if (cart.length === 0) return;
 
     try {
-      // Generate a random 3-digit password
-      const password = Math.floor(100 + Math.random() * 900);
+      const password = await getNextPassword(currentSession.id);
 
       const orderData = {
         type: "balcao",

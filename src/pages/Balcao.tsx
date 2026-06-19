@@ -60,6 +60,7 @@ export default function Balcao() {
   const [customerName, setCustomerName] = useState("");
   const [observations, setObservations] = useState("");
   const [step, setStep] = useState<1 | 2>(1);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     // Get open cashier session
@@ -321,8 +322,9 @@ export default function Balcao() {
       alert("Abra o caixa primeiro!");
       return;
     }
-    if (cart.length === 0) return;
+    if (cart.length === 0 || isProcessing) return;
 
+    setIsProcessing(true);
     try {
       const password = await getNextPassword(currentSession.id);
 
@@ -367,6 +369,8 @@ export default function Balcao() {
           (error.message || "Verifique os dados e tente novamente."),
       );
       handleFirestoreError(error, OperationType.CREATE, "orders");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -729,11 +733,11 @@ export default function Balcao() {
             </div>
             <button
               onClick={handleCheckout}
-              disabled={cart.length === 0}
+              disabled={cart.length === 0 || isProcessing}
               className="w-full bg-green-600 text-white py-3 sm:py-4 rounded-xl font-bold text-lg sm:text-xl shadow-lg hover:bg-green-700 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all"
             >
               <CheckCircle className="w-6 h-6 sm:w-7 h-7 mr-2" />
-              Finalizar Venda
+              {isProcessing ? "Finalizando..." : "Finalizar Venda"}
             </button>
           </div>
         </div>

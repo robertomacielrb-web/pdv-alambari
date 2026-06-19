@@ -50,6 +50,7 @@ export default function Caixa() {
   const [currentSession, setCurrentSession] = useState<CashierSession | null>(
     null,
   );
+  const [isProcessing, setIsProcessing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [initialBalanceInput, setInitialBalanceInput] = useState("");
 
@@ -139,12 +140,14 @@ export default function Caixa() {
 
   const handleOpenCashier = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isProcessing) return;
     const initialBalance = parseFloat(initialBalanceInput.replace(",", "."));
     if (isNaN(initialBalance) || initialBalance < 0) {
       alert("Valor inicial inválido");
       return;
     }
 
+    setIsProcessing(true);
     try {
       await addDoc(collection(db, "cashierSessions"), {
         status: "open",
@@ -156,6 +159,8 @@ export default function Caixa() {
       setInitialBalanceInput("");
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, "cashierSessions");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -168,8 +173,9 @@ export default function Caixa() {
   };
 
   const confirmCloseCashier = async () => {
-    if (!currentSession) return;
+    if (!currentSession || isProcessing) return;
 
+    setIsProcessing(true);
     try {
       const q = query(
         collection(db, "orders"),
@@ -200,6 +206,8 @@ export default function Caixa() {
         `cashierSessions/${currentSession.id}`,
       );
       setIsConfirmingClose(false);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -298,9 +306,10 @@ export default function Caixa() {
                   <div className="flex gap-2">
                     <button
                       onClick={confirmCloseCashier}
-                      className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-700 transition-all text-sm"
+                      disabled={isProcessing}
+                      className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-red-700 transition-all text-sm disabled:opacity-50"
                     >
-                      Sim, fechar
+                      {isProcessing ? "..." : "Sim, fechar"}
                     </button>
                     <button
                       onClick={() => setIsConfirmingClose(false)}
@@ -351,10 +360,11 @@ export default function Caixa() {
                 </div>
                 <button
                   type="submit"
-                  className="bg-green-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-green-700 hover:shadow-lg transition-all flex items-center shrink-0"
+                  disabled={isProcessing}
+                  className="bg-green-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-green-700 hover:shadow-lg transition-all flex items-center shrink-0 disabled:opacity-50"
                 >
                   <Unlock className="w-5 h-5 mr-2" />
-                  Abrir Caixa
+                  {isProcessing ? "Abrindo..." : "Abrir Caixa"}
                 </button>
               </form>
             </div>

@@ -76,6 +76,7 @@ export default function Fiados() {
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     // Get open cashier session
@@ -450,8 +451,9 @@ export default function Fiados() {
       alert("Abra o caixa primeiro para receber o pagamento!");
       return;
     }
-    if (!selectedFiado) return;
+    if (!selectedFiado || isProcessing) return;
 
+    setIsProcessing(true);
     try {
       const password = selectedFiado.password || await getNextPassword(currentSession.id);
 
@@ -494,6 +496,8 @@ export default function Fiados() {
         OperationType.UPDATE,
         `orders/${selectedFiado.id}`,
       );
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -858,11 +862,11 @@ export default function Fiados() {
                     </button>
                     <button
                       onClick={handleCheckout}
-                      disabled={cart.length === 0 || !currentSession}
-                      className="bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"
+                      disabled={cart.length === 0 || !currentSession || isProcessing}
+                      className="bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center transition-all"
                     >
                       <CheckCircle className="w-5 h-5 mr-1" />
-                      Receber
+                      {isProcessing ? "Recebendo..." : "Receber"}
                     </button>
                   </div>
 

@@ -64,6 +64,7 @@ export default function Delivery() {
   const [observations, setObservations] = useState("");
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [step, setStep] = useState<1 | 2>(1);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     // Get open cashier session
@@ -337,7 +338,7 @@ export default function Delivery() {
       alert("Abra o caixa primeiro!");
       return;
     }
-    if (cart.length === 0) return;
+    if (cart.length === 0 || isProcessing) return;
     if (!customerName.trim()) {
       alert("O nome do cliente é obrigatório para entrega!");
       return;
@@ -347,6 +348,7 @@ export default function Delivery() {
       return;
     }
 
+    setIsProcessing(true);
     try {
       const password = await getNextPassword(currentSession.id);
 
@@ -397,6 +399,8 @@ export default function Delivery() {
           (error.message || "Verifique os dados e tente novamente."),
       );
       handleFirestoreError(error, OperationType.CREATE, "orders");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -773,11 +777,11 @@ export default function Delivery() {
               </div>
               <button
                 onClick={handleCheckout}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || isProcessing}
                 className="w-full bg-orange-600 text-white py-4 rounded-xl font-bold text-xl shadow-lg hover:bg-orange-700 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all"
               >
                 <CheckCircle className="w-6 h-6 mr-2" />
-                Lançar Entrega
+                {isProcessing ? "Lançando..." : "Lançar Entrega"}
               </button>
             </div>
           </div>

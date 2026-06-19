@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   collection,
@@ -11,6 +11,7 @@ import {
   increment,
   setDoc,
   deleteDoc,
+  getDocs,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType, getNextPassword } from "../firebase";
 import {
@@ -88,10 +89,12 @@ export default function Mesas() {
     "dinheiro" | "cartao" | "pix" | "fiado"
   >("dinheiro");
   const [step, setStep] = useState<1 | 2>(1);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const [tables, setTables] = useState<Table[]>([]);
   const [isAddTableModalOpen, setIsAddTableModalOpen] = useState(false);
   const [newTableNumber, setNewTableNumber] = useState("");
+  const isSavingRef = useRef(false);
 
   useEffect(() => {
     // Get open cashier session
@@ -391,10 +394,18 @@ export default function Mesas() {
       closeTableModal();
     }
 
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+
     try {
-      const existingOrder = openTables.find(
-        (t) => t.tableNumber === currentTableNumber,
+      const tableQuery = query(
+        collection(db, "orders"),
+        where("type", "==", "mesa"),
+        where("status", "==", "open"),
+        where("tableNumber", "==", currentTableNumber)
       );
+      const querySnapshot = await getDocs(tableQuery);
+      const existingOrder = !querySnapshot.empty ? { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as Order : null;
 
       const orderData: any = {
         type: "mesa",
@@ -449,6 +460,8 @@ export default function Mesas() {
         );
       }
       handleFirestoreError(error, OperationType.WRITE, "orders");
+    } finally {
+      isSavingRef.current = false;
     }
   };
 
@@ -689,17 +702,23 @@ export default function Mesas() {
       alert("Abra o caixa primeiro!");
       return;
     }
-    if (!selectedTable || cart.length === 0) return;
+    if (!selectedTable || cart.length === 0 || isProcessing) return;
 
     if (paymentMethod === "fiado" && !customerName.trim()) {
       alert("O nome do cliente é obrigatório para transferir para Fiado!");
       return;
     }
 
+    setIsProcessing(true);
     try {
-      const existingOrder = openTables.find(
-        (t) => t.tableNumber === selectedTable,
+      const tableQuery = query(
+        collection(db, "orders"),
+        where("type", "==", "mesa"),
+        where("status", "==", "open"),
+        where("tableNumber", "==", selectedTable)
       );
+      const querySnapshot = await getDocs(tableQuery);
+      const existingOrder = !querySnapshot.empty ? { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as Order : null;
 
       const isFiado = paymentMethod === "fiado";
 
@@ -768,6 +787,8 @@ export default function Mesas() {
           (error.message || "Verifique os dados e tente novamente."),
       );
       handleFirestoreError(error, OperationType.WRITE, "orders");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -1236,13 +1257,13 @@ export default function Mesas() {
                       </button>
                       <button
                         onClick={handleCheckout}
-                        disabled={cart.length === 0 || !currentSession}
+                        disabled={cart.length === 0 || !currentSession || isProcessing}
                         className="bg-green-600 text-white py-3 sm:py-4 rounded-xl font-bold text-md sm:text-lg shadow-lg hover:bg-green-700 hover:shadow-xl disabled:opacity-50 flex items-center justify-center transition-all"
                       >
                         <CheckCircle className="w-5 h-5 sm:w-6 h-6 mr-2" />
-                        {paymentMethod === "fiado"
+                        {isProcessing ? "Processando..." : (paymentMethod === "fiado"
                           ? "Transferir para Fiado"
-                          : "Fechar Conta"}
+                          : "Fechar Conta")}
                       </button>
                     </div>
 

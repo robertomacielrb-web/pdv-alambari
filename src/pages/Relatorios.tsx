@@ -186,15 +186,21 @@ export default function Relatorios() {
 
   // 1. Sales by Date (Detailed Report)
   const salesByDate = useMemo(() => {
-    const map: Record<string, { total: number; count: number }> = {};
+    const map: Record<string, { total: number; count: number; dinheiro: number; cartao: number; pix: number; outros: number }> = {};
     orders.forEach((o) => {
       if (o.closedAt) {
         const d = format(new Date(o.closedAt), "dd/MM/yyyy");
         if (!map[d]) {
-          map[d] = { total: 0, count: 0 };
+          map[d] = { total: 0, count: 0, dinheiro: 0, cartao: 0, pix: 0, outros: 0 };
         }
         map[d].total += o.total;
         map[d].count += 1;
+        
+        const pm = o.paymentMethod || "outros";
+        if (pm === "dinheiro") map[d].dinheiro += o.total;
+        else if (pm === "cartao") map[d].cartao += o.total;
+        else if (pm === "pix") map[d].pix += o.total;
+        else map[d].outros += o.total;
       }
     });
     return Object.entries(map)
@@ -203,6 +209,10 @@ export default function Relatorios() {
         total: data.total,
         count: data.count,
         ticketMedio: data.count > 0 ? data.total / data.count : 0,
+        dinheiro: data.dinheiro,
+        cartao: data.cartao,
+        pix: data.pix,
+        outros: data.outros,
       }))
       .sort((a, b) => {
         const [da, ma, ya] = a.date.split("/");
@@ -255,9 +265,9 @@ export default function Relatorios() {
   const totalRevenue = orders.reduce((acc, o) => acc + o.total, 0);
 
   const handleExportCSV = () => {
-    let csv = "Data,Pedidos,Valor Total,Ticket Medio\n";
+    let csv = "Data,Pedidos,Valor Total,Dinheiro,Cartão,PIX,Outros,Ticket Medio\n";
     salesByDate.forEach(row => {
-      csv += `${row.date},${row.count},${row.total.toFixed(2)},${row.ticketMedio.toFixed(2)}\n`;
+      csv += `${row.date},${row.count},${row.total.toFixed(2)},${row.dinheiro.toFixed(2)},${row.cartao.toFixed(2)},${row.pix.toFixed(2)},${row.outros.toFixed(2)},${row.ticketMedio.toFixed(2)}\n`;
     });
     
     // Add orders detail as well below
@@ -433,7 +443,7 @@ export default function Relatorios() {
 
               {/* Tabela */}
               <div className="col-span-1 border-gray-100 overflow-auto bg-gray-50 h-72 lg:h-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="min-w-full divide-y divide-gray-200 min-w-[600px]">
                   <thead className="bg-gray-100 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">
@@ -441,6 +451,18 @@ export default function Relatorios() {
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase">
                         Apurado
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase">
+                        <div className="flex flex-col gap-1">
+                          <span>Dinheiro</span>
+                          <span>Cartão</span>
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase">
+                        <div className="flex flex-col gap-1">
+                          <span>PIX</span>
+                          <span>Outros</span>
+                        </div>
                       </th>
                       <th className="px-4 py-3 text-right text-xs font-bold text-gray-500 uppercase">
                         Pedidos
@@ -460,8 +482,20 @@ export default function Relatorios() {
                           <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                             {row.date}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-bold text-gray-900">
                             R$ {row.total.toFixed(2).replace(".", ",")}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-500 font-mono">
+                            <div className="flex flex-col gap-1 items-end">
+                              <span className="text-green-600" title="Dinheiro">R$ {row.dinheiro.toFixed(2).replace(".", ",")}</span>
+                              <span className="text-blue-600" title="Cartão">R$ {row.cartao.toFixed(2).replace(".", ",")}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-500 font-mono">
+                            <div className="flex flex-col gap-1 items-end">
+                              <span className="text-purple-600" title="PIX">R$ {row.pix.toFixed(2).replace(".", ",")}</span>
+                              <span className="text-gray-500" title="Outros">R$ {row.outros.toFixed(2).replace(".", ",")}</span>
+                            </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-500">
                             {row.count}
@@ -474,7 +508,7 @@ export default function Relatorios() {
                     ) : (
                       <tr>
                         <td
-                          colSpan={4}
+                          colSpan={6}
                           className="px-4 py-8 text-center text-gray-400 text-sm"
                         >
                           Sem dados para tabela

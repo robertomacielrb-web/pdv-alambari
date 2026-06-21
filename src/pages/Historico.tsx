@@ -499,8 +499,27 @@ export default function Historico() {
                 Imprimir
               </button>
               <button
+                onClick={async () => {
+                  if (window.confirm("Deseja realmente cancelar esta venda? Esta ação não pode ser desfeita e o registro será excluído.")) {
+                    try {
+                      const { deleteDoc, doc } = await import('firebase/firestore');
+                      await deleteDoc(doc(db, "orders", selectedOrder.id));
+                      setSelectedOrder(null);
+                      alert("Venda cancelada e excluída com sucesso.");
+                      fetchOrders();
+                    } catch (error) {
+                      console.error(error);
+                      alert("Erro ao cancelar venda.");
+                    }
+                  }
+                }}
+                className="flex-1 bg-white border border-red-300 text-red-600 py-2 rounded-md font-bold hover:bg-red-50"
+              >
+                Cancelar Venda
+              </button>
+              <button
                 onClick={() => setSelectedOrder(null)}
-                className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-md font-bold hover:bg-gray-50"
+                className="flex-[0.5] sm:flex-none px-4 bg-white border border-gray-300 text-gray-700 py-2 rounded-md font-bold hover:bg-gray-50"
               >
                 Fechar
               </button>

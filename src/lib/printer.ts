@@ -73,6 +73,29 @@ export class BluetoothPrinter {
 export const thermalPrinter = new BluetoothPrinter();
 
 export function formatOrderToText(order: any): string {
+  if (order.isCashierReport) {
+    let text = `      FECHAMENTO DE CAIXA\n`;
+    text += `--------------------------------\n`;
+    text += `Data: ${new Date().toLocaleString('pt-BR')}\n`;
+    text += `--------------------------------\n`;
+    text += `Saldo Inicial:     R$ ${order.initialBalance.toFixed(2)}\n`;
+    text += `--------------------------------\n`;
+    text += `Dinheiro:          R$ ${order.dinheiro.toFixed(2)}\n`;
+    text += `Cartao:            R$ ${order.cartao.toFixed(2)}\n`;
+    text += `PIX:               R$ ${order.pix.toFixed(2)}\n`;
+    text += `Fiado:             R$ ${order.fiado.toFixed(2)}\n`;
+    text += `Outros:            R$ ${order.outros.toFixed(2)}\n`;
+    text += `--------------------------------\n`;
+    text += `Total de Vendas:   R$ ${order.totalSales.toFixed(2)}\n`;
+    text += `Saldo Final Caixa: R$ ${order.finalBalance.toFixed(2)}\n`;
+    text += `--------------------------------\n`;
+    text += `\n`;
+    text += `     _________________________  \n`;
+    text += `      Assinatura do Operador    \n`;
+    text += `--------------------------------\n\n`;
+    return text;
+  }
+
   let text = '';
   const date = order.closedAt || order.createdAt || new Date().toISOString();
   const dateStr = new Date(date).toLocaleString('pt-BR');

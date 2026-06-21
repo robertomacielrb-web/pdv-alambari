@@ -11,6 +11,7 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
+import { executePrint } from "../lib/printHelper";
 import {
   Lock,
   Unlock,
@@ -184,8 +185,23 @@ export default function Caixa() {
       );
       const snapshot = await getDocs(q);
       let totalSales = 0;
+      let dinheiro = 0;
+      let cartao = 0;
+      let pix = 0;
+      let fiado = 0;
+      let outros = 0;
+
       snapshot.forEach((doc) => {
-        totalSales += Number(doc.data().total) || 0;
+        const data = doc.data();
+        const val = Number(data.total) || 0;
+        totalSales += val;
+        
+        const pt = data.paymentMethod;
+        if (pt === "dinheiro") dinheiro += val;
+        else if (pt === "cartao") cartao += val;
+        else if (pt === "pix") pix += val;
+        else if (pt === "fiado") fiado += val;
+        else outros += val;
       });
 
       const finalBalance = currentSession.initialBalance + totalSales;
@@ -196,6 +212,49 @@ export default function Caixa() {
         totalSales,
         finalBalance,
       });
+
+      const formatVal = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
+      let printContent = `
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="margin: 0; font-size: 18px;">FECHAMENTO DE CAIXA</h2>
+          <p style="margin: 5px 0 0 0; font-size: 14px;">Data: ${new Date().toLocaleString("pt-BR")}</p>
+        </div>
+        <div style="margin-bottom: 20px;">
+          <p style="margin: 5px 0;"><strong>Saldo Inicial:</strong> ${formatVal(currentSession.initialBalance)}</p>
+        </div>
+        <hr style="border: 1px dashed #000; margin: 10px 0;" />
+        <div style="margin-bottom: 20px;">
+          <h3 style="margin: 0 0 10px 0; font-size: 16px;">Vendas por Pagamento</h3>
+          <table style="width: 100%; font-size: 14px;">
+      `;
+      if (dinheiro > 0) printContent += `<tr><td>Dinheiro</td><td style="text-align: right;">${formatVal(dinheiro)}</td></tr>`;
+      if (cartao > 0) printContent += `<tr><td>Cartão</td><td style="text-align: right;">${formatVal(cartao)}</td></tr>`;
+      if (pix > 0) printContent += `<tr><td>PIX</td><td style="text-align: right;">${formatVal(pix)}</td></tr>`;
+      if (fiado > 0) printContent += `<tr><td>Fiado pago</td><td style="text-align: right;">${formatVal(fiado)}</td></tr>`;
+      if (outros > 0) printContent += `<tr><td>Outros</td><td style="text-align: right;">${formatVal(outros)}</td></tr>`;
+      printContent += `
+          </table>
+        </div>
+        <hr style="border: 1px dashed #000; margin: 10px 0;" />
+        <div style="margin-bottom: 20px;">
+          <p style="margin: 5px 0;"><strong>Total de Vendas:</strong> ${formatVal(totalSales)}</p>
+          <p style="margin: 5px 0; font-size: 16px;"><strong>Saldo Final Caixa:</strong> ${formatVal(finalBalance)}</p>
+        </div>
+        <div style="text-align: center; margin-top: 30px;">
+          <p style="margin: 0; font-size: 14px;">________________________________</p>
+          <p style="margin: 5px 0 0 0; font-size: 14px;">Assinatura do Operador</p>
+        </div>
+      `;
+
+      executePrint(
+        { 
+          isCashierReport: true, 
+          initialBalance: currentSession.initialBalance,
+          dinheiro, cartao, pix, fiado, outros, totalSales, finalBalance
+        }, 
+        printContent
+      );
+
       setIsConfirmingClose(false);
     } catch (error: any) {
       console.error(error);

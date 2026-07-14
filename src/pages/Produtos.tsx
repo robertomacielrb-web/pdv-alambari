@@ -7,6 +7,7 @@ interface Product {
   id: string;
   name: string;
   price: number;
+  costPrice?: number;
   category: string;
   stock?: number;
   createdAt: string;
@@ -16,7 +17,7 @@ export default function Produtos() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [formData, setFormData] = useState({ name: '', price: '', category: '', stock: '' });
+  const [formData, setFormData] = useState({ name: '', price: '', costPrice: '', category: '', stock: '' });
   const [isNewCategory, setIsNewCategory] = useState(false);
 
   useEffect(() => {
@@ -56,6 +57,15 @@ export default function Produtos() {
         alert("Preço inválido");
         return;
       }
+
+      let costPriceVal: number | undefined = undefined;
+      if (formData.costPrice.trim() !== '') {
+        costPriceVal = parseFloat(formData.costPrice.replace(',', '.'));
+        if (isNaN(costPriceVal) || costPriceVal < 0) {
+          alert("Preço de custo inválido");
+          return;
+        }
+      }
       
       const stockVal = formData.stock !== '' ? parseInt(formData.stock, 10) : undefined;
       if (stockVal !== undefined && (isNaN(stockVal) || stockVal < 0)) {
@@ -66,6 +76,7 @@ export default function Produtos() {
       const productData = {
         name: formData.name.trim(),
         price: price,
+        ...(costPriceVal !== undefined && { costPrice: costPriceVal }),
         category: formData.category.trim(),
         ...(stockVal !== undefined && { stock: stockVal }),
       };
@@ -113,6 +124,7 @@ export default function Produtos() {
       setFormData({ 
         name: product.name, 
         price: product.price.toString(), 
+        costPrice: product.costPrice !== undefined ? product.costPrice.toString() : '',
         category: product.category,
         stock: product.stock !== undefined ? product.stock.toString() : ''
       });
@@ -120,7 +132,7 @@ export default function Produtos() {
     } else {
       setEditingProduct(null);
       const defaultCat = Object.keys(groupedProducts).length > 0 ? Object.keys(groupedProducts).sort()[0] : '';
-      setFormData({ name: '', price: '', category: defaultCat, stock: '' });
+      setFormData({ name: '', price: '', costPrice: '', category: defaultCat, stock: '' });
       setIsNewCategory(Object.keys(groupedProducts).length === 0);
     }
     setIsModalOpen(true);
@@ -151,6 +163,7 @@ export default function Produtos() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preço</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Custo</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estoque</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
             </tr>
@@ -164,7 +177,7 @@ export default function Produtos() {
               Object.keys(groupedProducts).sort().map(category => (
                 <React.Fragment key={category}>
                   <tr className="bg-gray-100/80">
-                    <td colSpan={5} className="px-6 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-y border-gray-200">
+                    <td colSpan={6} className="px-6 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-y border-gray-200">
                       {category}
                     </td>
                   </tr>
@@ -174,6 +187,9 @@ export default function Produtos() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.category}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         R$ {product.price.toFixed(2).replace('.', ',')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {product.costPrice !== undefined ? `R$ ${product.costPrice.toFixed(2).replace('.', ',')}` : '-'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         <div className="flex items-center">
@@ -289,6 +305,17 @@ export default function Produtos() {
                     placeholder="0.00"
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Preço de Custo (R$)</label>
+                  <input
+                    type="text"
+                    value={formData.costPrice}
+                    onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
+                    placeholder="0.00"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Opcional, usado para cálculo de CMV no Fluxo de Caixa</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Estoque Opcional (Quant.)</label>

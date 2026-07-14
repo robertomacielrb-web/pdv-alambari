@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Bluetooth, Printer, Settings, PrinterIcon, Info, Store, Save, ExternalLink, Copy } from 'lucide-react';
+import { Bluetooth, Printer, Settings, PrinterIcon, Info, Store, Save, ExternalLink, Copy, Shield, Download } from 'lucide-react';
 import { thermalPrinter } from '../lib/printer';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 
 export default function Configuracoes() {
@@ -11,6 +11,7 @@ export default function Configuracoes() {
   
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [isDownloadingBackup, setIsDownloadingBackup] = useState(false);
 
   useEffect(() => {
     const savedMode = localStorage.getItem('printMode') as 'browser' | 'bluetooth';
@@ -78,6 +79,42 @@ export default function Configuracoes() {
       await thermalPrinter.print('*** TESTE DE IMPRESSAO ***\nPDV ALAMBARI DEFUMADOS\nImpressora Bluetooth conectada com sucesso!\n');
     } catch (error: any) {
       alert('Erro ao imprimir: ' + error.message);
+    }
+  };
+
+  const handleDownloadBackup = async () => {
+    if (!window.confirm("Deseja gerar e baixar um arquivo de backup com todos os dados atuais?")) return;
+    setIsDownloadingBackup(true);
+    try {
+      const collectionsToBackup = ['products', 'orders', 'bills', 'tables', 'cashierSessions', 'settings'];
+      const backupData: Record<string, any[]> = {};
+      
+      for (const colName of collectionsToBackup) {
+        const querySnapshot = await getDocs(collection(db, colName));
+        const colData: any[] = [];
+        querySnapshot.forEach((docSnap) => {
+          colData.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        backupData[colName] = colData;
+      }
+
+      const backupDataStr = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([backupDataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `backup_caixa_pdv_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+    } catch (error) {
+      console.error('Erro ao baixar backup:', error);
+      alert('Erro ao realizar o backup.');
+    } finally {
+      setIsDownloadingBackup(false);
     }
   };
 
@@ -239,6 +276,34 @@ export default function Configuracoes() {
           </div>
         </div>
       </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-4 border-b pb-4">
+          <Shield className="w-6 h-6 text-emerald-500" />
+          Backup e Segurança
+        </h2>
+
+        <div className="max-w-md space-y-4">
+          <p className="text-sm text-gray-600 mb-4">
+            Faça o download de todos os dados do sistema (vendas, produtos, contas, sessões de caixa) em formato JSON para fins de backup e segurança. Recomendamos realizar backups periodicamente.
+          </p>
+
+          <button
+            onClick={handleDownloadBackup}
+            disabled={isDownloadingBackup}
+            className="bg-emerald-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
+          >
+            {isDownloadingBackup ? (
+              'Gerando Backup...'
+            ) : (
+              <>
+                <Download className="w-5 h-5" /> Baixar Backup dos Dados
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
     </div>
   );
 }

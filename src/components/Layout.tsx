@@ -13,7 +13,8 @@ import {
   ChefHat,
   BarChart2,
   Settings,
-  Receipt
+  Receipt,
+  Activity
 } from 'lucide-react';
 
 export default function Layout() {
@@ -30,6 +31,7 @@ export default function Layout() {
     { name: 'Histórico', href: '/historico', icon: History },
     { name: 'Relatórios', href: '/relatorios', icon: BarChart2 },
     { name: 'Contas a Pagar', href: '/contas-pagar', icon: Receipt },
+    { name: 'Fluxo de Caixa', href: '/fluxo-caixa', icon: Activity },
     { name: 'Configurações', href: '/configuracoes', icon: Settings },
   ];
 

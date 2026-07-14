@@ -14,6 +14,7 @@ import Relatorios from './pages/Relatorios';
 import Configuracoes from './pages/Configuracoes';
 import Cardapio from './pages/Cardapio';
 import ContasPagar from './pages/ContasPagar';
+import FluxoCaixa from './pages/FluxoCaixa';
 
 function AppRoutes() {
   return (
@@ -31,6 +32,7 @@ function AppRoutes() {
         <Route path="relatorios" element={<Relatorios />} />
         <Route path="configuracoes" element={<Configuracoes />} />
         <Route path="contas-pagar" element={<ContasPagar />} />
+        <Route path="fluxo-caixa" element={<FluxoCaixa />} />
       </Route>
     </Routes>
   );

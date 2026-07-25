@@ -58,6 +58,7 @@ export default function Delivery() {
   const [paymentMethod, setPaymentMethod] = useState<
     "dinheiro" | "cartao" | "pix"
   >("dinheiro");
+  const [discount, setDiscount] = useState<number | "">("");
   const [customerName, setCustomerName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [address, setAddress] = useState("");
@@ -191,7 +192,7 @@ export default function Delivery() {
   };
 
   const subtotal = cart.reduce((sum, item) => sum + parsedPrice(item.price) * (Number(item.quantity) || 1), 0);
-  const total = subtotal + (Number(deliveryFee) || 0);
+  const total = Math.max(0, subtotal + (Number(deliveryFee) || 0) - (Number(discount) || 0));
 
   const handlePrint = (order: any) => {
     const itemsHtml = order.items
@@ -283,12 +284,18 @@ export default function Delivery() {
           <hr style="border: 0; border-top: 1px dashed #ccc; margin: 10px 0;">
           <div class="total" style="font-weight: normal;">
             <span>Subtotal:</span>
-            <span>R$ ${(order.total - order.deliveryFee).toFixed(2).replace(".", ",")}</span>
+            <span>R$ ${(order.total - (order.deliveryFee || 0) + (order.discount || 0)).toFixed(2).replace(".", ",")}</span>
           </div>
           <div class="total" style="font-weight: normal;">
             <span>Taxa Entrega:</span>
             <span>R$ ${(order.deliveryFee || 0).toFixed(2).replace(".", ",")}</span>
           </div>
+          ${order.discount && order.discount > 0 ? `
+          <div class="total" style="font-weight: normal;">
+            <span>Desconto:</span>
+            <span>- R$ ${order.discount.toFixed(2).replace(".", ",")}</span>
+          </div>
+          ` : ""}
           <div class="total" style="font-size: 16px; margin-top: 10px;">
             <span>TOTAL:</span>
             <span>R$ ${order.total.toFixed(2).replace(".", ",")}</span>
@@ -364,6 +371,7 @@ export default function Delivery() {
           productionStatus: "pending",
         })),
         total: Number(total) || 0,
+        discount: Number(discount) || 0,
         paymentMethod: paymentMethod || "dinheiro",
         customerName,
         deliveryPhone: phoneNumber,
@@ -392,6 +400,7 @@ export default function Delivery() {
       setPhoneNumber("");
       setDeliveryFee(0);
       setObservations("");
+      setDiscount("");
       setStep(1);
     } catch (error: any) {
       alert(
@@ -763,9 +772,21 @@ export default function Delivery() {
                  <span>Subtotal</span>
                  <span>R$ {subtotal.toFixed(2).replace(".", ",")}</span>
               </div>
-              <div className="flex justify-between items-center mb-4 text-gray-500 text-sm font-bold">
+              <div className="flex justify-between items-center mb-2 text-gray-500 text-sm font-bold">
                  <span>Taxa Entrega</span>
                  <span>R$ {(deliveryFee || 0).toFixed(2).replace(".", ",")}</span>
+              </div>
+              <div className="flex justify-between items-center mb-4 text-gray-500 text-sm font-bold pb-2 border-b border-gray-100">
+                 <span>Desconto (R$)</span>
+                 <input
+                  type="number"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value ? Number(e.target.value) : "")}
+                  className="w-24 border-2 border-gray-200 rounded-lg p-1 text-right focus:border-gray-500 outline-none"
+                  placeholder="0,00"
+                  min="0"
+                  step="0.01"
+                />
               </div>
               <div className="flex justify-between items-center mb-6 bg-gray-50 p-3 rounded-xl border shadow-sm">
                 <span className="text-gray-800 font-bold text-lg">

@@ -88,6 +88,7 @@ export default function Mesas() {
   const [paymentMethod, setPaymentMethod] = useState<
     "dinheiro" | "cartao" | "pix" | "fiado"
   >("dinheiro");
+  const [discount, setDiscount] = useState<number | "">("");
   const [step, setStep] = useState<1 | 2>(1);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -345,7 +346,8 @@ export default function Mesas() {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const total = cart.reduce((sum, item) => sum + parsedPrice(item.price) * (Number(item.quantity) || 1), 0);
+  const subtotal = cart.reduce((sum, item) => sum + parsedPrice(item.price) * (Number(item.quantity) || 1), 0);
+  const total = Math.max(0, subtotal - (Number(discount) || 0));
 
   const handleSaveTable = async (isAutoSave = false) => {
     if (!selectedTable) return;
@@ -651,6 +653,16 @@ export default function Mesas() {
               ${itemsHtml}
             </tbody>
           </table>
+          ${order.discount && order.discount > 0 ? `
+          <div class="total" style="font-weight: normal;">
+            <span>Subtotal:</span>
+            <span>R$ ${(order.total + order.discount).toFixed(2).replace(".", ",")}</span>
+          </div>
+          <div class="total" style="font-weight: normal;">
+            <span>Desconto:</span>
+            <span>- R$ ${order.discount.toFixed(2).replace(".", ",")}</span>
+          </div>
+          ` : ""}
           <div class="total">
             <span>TOTAL:</span>
             <span>R$ ${order.total.toFixed(2).replace(".", ",")}</span>
@@ -736,6 +748,7 @@ export default function Mesas() {
           productionStatus: item.productionStatus || "pending",
         })),
         total: Number(total) || 0,
+        discount: Number(discount) || 0,
         createdAt:
           typeof existingOrder?.createdAt === "string" &&
           existingOrder.createdAt.includes("T")
@@ -1240,13 +1253,37 @@ export default function Mesas() {
                       </svg>
                       Enviar Conta por WhatsApp
                     </button>
-                    <div className="flex justify-between items-center mb-4 sm:mb-6 bg-white p-3 sm:p-4 rounded-xl border shadow-sm">
-                      <span className="text-gray-600 font-bold text-md sm:text-lg">
-                        Total a Pagar
-                      </span>
-                      <span className="text-2xl sm:text-3xl font-black text-gray-800">
-                        R$ {total.toFixed(2).replace(".", ",")}
-                      </span>
+                    <div className="mb-4 sm:mb-6 bg-white p-3 sm:p-4 rounded-xl border shadow-sm">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-gray-500 font-medium text-sm sm:text-base">
+                          Subtotal
+                        </span>
+                        <span className="text-lg font-bold text-gray-700">
+                          R$ {subtotal.toFixed(2).replace(".", ",")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center mb-2 border-b border-gray-100 pb-2">
+                        <span className="text-gray-500 font-medium text-sm sm:text-base">
+                          Desconto (R$)
+                        </span>
+                        <input
+                          type="number"
+                          value={discount}
+                          onChange={(e) => setDiscount(e.target.value ? Number(e.target.value) : "")}
+                          className="w-24 border-2 border-gray-200 rounded-lg p-1 text-right focus:border-gray-500 outline-none"
+                          placeholder="0,00"
+                          min="0"
+                          step="0.01"
+                        />
+                      </div>
+                      <div className="flex justify-between items-center pt-2">
+                        <span className="text-gray-600 font-bold text-md sm:text-lg">
+                          Total a Pagar
+                        </span>
+                        <span className="text-2xl sm:text-3xl font-black text-gray-800">
+                          R$ {total.toFixed(2).replace(".", ",")}
+                        </span>
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:gap-3">
                       <button

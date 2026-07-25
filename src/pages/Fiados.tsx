@@ -73,6 +73,7 @@ export default function Fiados() {
   const [paymentMethod, setPaymentMethod] = useState<
     "dinheiro" | "cartao" | "pix"
   >("dinheiro");
+  const [discount, setDiscount] = useState<number | "">("");
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
@@ -165,6 +166,7 @@ export default function Fiados() {
   const closeFiadoModal = () => {
     setSelectedFiado(null);
     setCart([]);
+    setDiscount("");
   };
 
   const [isCreatingFiado, setIsCreatingFiado] = useState(false);
@@ -284,7 +286,8 @@ export default function Fiados() {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = Math.max(0, subtotal - (Number(discount) || 0));
 
   const handleSaveFiado = async () => {
     if (!selectedFiado) return;
@@ -403,6 +406,16 @@ export default function Fiados() {
               ${itemsHtml}
             </tbody>
           </table>
+          ${order.discount && order.discount > 0 ? `
+          <div class="total" style="font-weight: normal;">
+            <span>Subtotal:</span>
+            <span>R$ ${(order.total + order.discount).toFixed(2).replace(".", ",")}</span>
+          </div>
+          <div class="total" style="font-weight: normal;">
+            <span>Desconto:</span>
+            <span>- R$ ${order.discount.toFixed(2).replace(".", ",")}</span>
+          </div>
+          ` : ""}
           <div class="total">
             <span>TOTAL:</span>
             <span>R$ ${order.total.toFixed(2).replace(".", ",")}</span>
@@ -469,6 +482,7 @@ export default function Fiados() {
           quantity: Number(item.quantity) || 1,
         })),
         total: Number(total) || 0,
+        discount: Number(discount) || 0,
         paymentMethod: paymentMethod || "dinheiro",
         createdAt:
           typeof selectedFiado.createdAt === "string" &&
@@ -845,7 +859,29 @@ export default function Fiados() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-600 text-sm font-medium">
+                      Subtotal
+                    </span>
+                    <span className="text-lg font-bold text-gray-700">
+                      R$ {subtotal.toFixed(2).replace(".", ",")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-200">
+                    <span className="text-gray-600 text-sm font-medium">
+                      Desconto (R$)
+                    </span>
+                    <input
+                      type="number"
+                      value={discount}
+                      onChange={(e) => setDiscount(e.target.value ? Number(e.target.value) : "")}
+                      className="w-24 border-2 border-gray-200 rounded-lg p-1 text-right focus:border-gray-500 outline-none"
+                      placeholder="0,00"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="flex justify-between items-center mb-4 pt-2">
                     <span className="text-gray-600 font-medium">
                       Total da Dívida
                     </span>

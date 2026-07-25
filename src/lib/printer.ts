@@ -123,6 +123,19 @@ export function formatOrderToText(order: any): string {
   }
 
   text += `--------------------------------\n`;
+  let subtotal = order.total;
+  if (order.discount && order.discount > 0) {
+    subtotal = order.total + order.discount;
+    if (order.type === 'delivery' && order.deliveryFee) subtotal -= order.deliveryFee;
+    text += `SUBTOTAL:            R$ ${subtotal.toFixed(2).replace('.', ',')}\n`;
+    if (order.type === 'delivery' && order.deliveryFee) {
+      text += `TAXA ENTREGA:        R$ ${order.deliveryFee.toFixed(2).replace('.', ',')}\n`;
+    }
+    text += `DESCONTO:            R$ ${order.discount.toFixed(2).replace('.', ',')}\n`;
+  } else if (order.type === 'delivery' && order.deliveryFee) {
+     text += `TAXA ENTREGA:        R$ ${order.deliveryFee.toFixed(2).replace('.', ',')}\n`;
+  }
+
   text += `TOTAL:               R$ ${order.total.toFixed(2).replace('.', ',')}\n`;
   text += `PAGAMENTO: ${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'N/A'}\n`;
   text += `--------------------------------\n`;

@@ -262,6 +262,22 @@ export default function Relatorios() {
     ].filter((x) => x.value > 0);
   }, [orders]);
 
+  // 4. Sales by Product
+  const salesByProduct = useMemo(() => {
+    const map: Record<string, { name: string, quantity: number, total: number }> = {};
+    orders.forEach(o => {
+      o.items.forEach(item => {
+        const key = item.productId || item.name;
+        if (!map[key]) {
+          map[key] = { name: item.name, quantity: 0, total: 0 };
+        }
+        map[key].quantity += item.quantity;
+        map[key].total += (item.price * item.quantity);
+      });
+    });
+    return Object.values(map).sort((a, b) => b.quantity - a.quantity);
+  }, [orders]);
+
   const totalRevenue = orders.reduce((acc, o) => acc + o.total, 0);
 
   const handleExportCSV = () => {
@@ -276,6 +292,12 @@ export default function Relatorios() {
       const d = o.closedAt ? format(new Date(o.closedAt), "dd/MM/yyyy") : "";
       const t = o.closedAt ? format(new Date(o.closedAt), "HH:mm") : "";
       csv += `${o.id},${d},${t},${o.status},${o.total.toFixed(2)},${o.paymentMethod || ""}\n`;
+    });
+
+    // Add products detail
+    csv += "\nItens Vendidos\nProduto,Quantidade,Total\n";
+    salesByProduct.forEach(p => {
+      csv += `${p.name},${p.quantity},${p.total.toFixed(2)}\n`;
     });
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -622,6 +644,53 @@ export default function Relatorios() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Top Produtos Table */}
+          <div className="bg-white rounded-lg shadow flex flex-col border-t-4 border-yellow-500">
+            <div className="p-6 border-b flex-shrink-0">
+              <h2 className="text-lg font-bold text-gray-800">
+                Itens Vendidos
+              </h2>
+            </div>
+            <div className="flex-1 overflow-auto p-0 max-h-96">
+              {salesByProduct.length > 0 ? (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Produto
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Qtd. Vendida
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Receita Total
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {salesByProduct.map((p, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                          {p.name}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900 text-right whitespace-nowrap">
+                          {p.quantity}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-bold text-gray-900 text-right whitespace-nowrap">
+                          R$ {p.total.toFixed(2).replace(".", ",")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-12 text-center text-gray-400">
+                  Sem itens vendidos no período
+                </div>
+              )}
             </div>
           </div>
 

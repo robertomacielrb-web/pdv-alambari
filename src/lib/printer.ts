@@ -137,7 +137,12 @@ export function formatOrderToText(order: any): string {
   }
 
   text += `TOTAL:               R$ ${order.total.toFixed(2).replace('.', ',')}\n`;
-  text += `PAGAMENTO: ${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'N/A'}\n`;
+  if (order.splitPayments && order.splitPayments.length > 0) {
+    const spText = order.splitPayments.map((sp:any) => `${sp.method.toUpperCase()} (R$ ${Number(sp.amount).toFixed(2).replace('.', ',')})`).join(' + ');
+    text += `PAGAMENTO: ${spText}\n`;
+  } else {
+    text += `PAGAMENTO: ${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'N/A'}\n`;
+  }
   text += `--------------------------------\n`;
   if (order.observations) {
     text += `OBS GERAL: ${order.observations}\n`;

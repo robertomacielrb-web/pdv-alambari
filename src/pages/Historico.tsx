@@ -20,7 +20,8 @@ interface Order {
   status: 'open' | 'closed';
   items: OrderItem[];
   total: number;
-  paymentMethod?: 'dinheiro' | 'cartao' | 'pix';
+  paymentMethod?: 'dinheiro' | 'cartao' | 'pix' | 'fiado' | 'multiplo';
+  splitPayments?: { method: string; amount: number }[];
   createdAt: string;
   closedAt?: string;
   password?: number;
@@ -220,7 +221,7 @@ export default function Historico() {
             <span>TOTAL:</span>
             <span>R$ ${order.total.toFixed(2).replace('.', ',')}</span>
           </div>
-          <p style="margin: 5px 0;">Pagamento: ${order.paymentMethod?.toUpperCase() || 'N/A'}</p>
+          <p style="margin: 5px 0;">Pagamento: ${(order.splitPayments && order.splitPayments.length > 0) ? order.splitPayments.map((sp:any) => `${sp.method.toUpperCase()} (R$ ${Number(sp.amount).toFixed(2).replace('.', ',')})`).join(' + ') : (order.paymentMethod?.toUpperCase() || 'N/A')}</p>
           <div class="footer">
             <p>Obrigado pela preferência!</p>
           </div>
@@ -366,9 +367,20 @@ export default function Historico() {
                       {order.type === 'delivery' && `Entrega: ${order.customerName}`}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex items-center gap-1.5">
-                        {getPaymentIcon(order.paymentMethod)}
-                        <span className="capitalize">{order.paymentMethod || '-'}</span>
+                      <div className="flex flex-col gap-1">
+                        {(order.splitPayments && order.splitPayments.length > 0) ? (
+                          order.splitPayments.map((sp: any, i: number) => (
+                             <div key={i} className="flex items-center gap-1.5 text-xs">
+                                {getPaymentIcon(sp.method)}
+                                <span className="capitalize">{sp.method}: R$ {Number(sp.amount).toFixed(2).replace('.', ',')}</span>
+                             </div>
+                          ))
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            {getPaymentIcon(order.paymentMethod)}
+                            <span className="capitalize">{order.paymentMethod || '-'}</span>
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
@@ -420,7 +432,11 @@ export default function Historico() {
                 </div>
                 <div>
                   <p className="text-gray-500">Pagamento</p>
-                  <p className="font-medium capitalize">{selectedOrder.paymentMethod || 'Não informado'}</p>
+                  <p className="font-medium capitalize">
+                     {(selectedOrder.splitPayments && selectedOrder.splitPayments.length > 0)
+                       ? selectedOrder.splitPayments.map((sp:any) => `${sp.method} (R$ ${Number(sp.amount).toFixed(2).replace('.', ',')})`).join(' + ')
+                       : (selectedOrder.paymentMethod || 'Não informado')}
+                  </p>
                 </div>
                 <div>
                   <p className="text-gray-500">ID do Pedido</p>

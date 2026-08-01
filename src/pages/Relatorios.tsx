@@ -46,7 +46,8 @@ interface Order {
   status: "open" | "closed";
   items: OrderItem[];
   total: number;
-  paymentMethod?: "dinheiro" | "cartao" | "pix";
+  paymentMethod?: "dinheiro" | "cartao" | "pix" | "fiado" | "multiplo";
+  splitPayments?: { method: string; amount: number }[];
   createdAt: string;
   closedAt?: string;
   type: string;
@@ -83,9 +84,11 @@ export default function Relatorios() {
       "yyyy-MM-dd",
     ),
   );
+  const [startTime, setStartTime] = useState<string>("00:00");
   const [endDate, setEndDate] = useState<string>(
     format(new Date(), "yyyy-MM-dd"),
   );
+  const [endTime, setEndTime] = useState<string>("23:59");
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [sessions, setSessions] = useState<CashierSession[]>([]);
@@ -124,8 +127,8 @@ export default function Relatorios() {
         const ordersSnap = await getDocs(qOrders);
 
         let fetchedOrders: Order[] = [];
-        const start = startOfDay(new Date(startDate + "T00:00:00"));
-        const end = endOfDay(new Date(endDate + "T00:00:00"));
+        const start = new Date(`${startDate}T${startTime}:00`);
+        const end = new Date(`${endDate}T${endTime}:59`);
 
         ordersSnap.forEach((doc) => {
           const data = doc.data() as any;
@@ -180,7 +183,7 @@ export default function Relatorios() {
     };
 
     fetchData();
-  }, [startDate, endDate]);
+  }, [startDate, endDate, startTime, endTime]);
 
   // Aggregations
 
@@ -196,11 +199,22 @@ export default function Relatorios() {
         map[d].total += o.total;
         map[d].count += 1;
         
-        const pm = o.paymentMethod || "outros";
-        if (pm === "dinheiro") map[d].dinheiro += o.total;
-        else if (pm === "cartao") map[d].cartao += o.total;
-        else if (pm === "pix") map[d].pix += o.total;
-        else map[d].outros += o.total;
+        if (o.splitPayments && o.splitPayments.length > 0) {
+          o.splitPayments.forEach((sp: any) => {
+            const spVal = Number(sp.amount) || 0;
+            const pt = sp.method;
+            if (pt === "dinheiro") map[d].dinheiro += spVal;
+            else if (pt === "cartao") map[d].cartao += spVal;
+            else if (pt === "pix") map[d].pix += spVal;
+            else map[d].outros += spVal;
+          });
+        } else {
+          const pm = o.paymentMethod || "outros";
+          if (pm === "dinheiro") map[d].dinheiro += o.total;
+          else if (pm === "cartao") map[d].cartao += o.total;
+          else if (pm === "pix") map[d].pix += o.total;
+          else map[d].outros += o.total;
+        }
       }
     });
     return Object.entries(map)
@@ -247,11 +261,22 @@ export default function Relatorios() {
       outros: 0,
     };
     orders.forEach((o) => {
-      const pm = o.paymentMethod || "outros";
-      if (map[pm] !== undefined) {
-        map[pm] += o.total;
+      if (o.splitPayments && o.splitPayments.length > 0) {
+        o.splitPayments.forEach((sp: any) => {
+          const pt = sp.method || "outros";
+          if (map[pt] !== undefined) {
+            map[pt] += Number(sp.amount) || 0;
+          } else {
+            map["outros"] += Number(sp.amount) || 0;
+          }
+        });
       } else {
-        map["outros"] += o.total;
+        const pm = o.paymentMethod || "outros";
+        if (map[pm] !== undefined) {
+          map[pm] += o.total;
+        } else {
+          map["outros"] += o.total;
+        }
       }
     });
     return [
@@ -291,7 +316,10 @@ export default function Relatorios() {
     orders.forEach(o => {
       const d = o.closedAt ? format(new Date(o.closedAt), "dd/MM/yyyy") : "";
       const t = o.closedAt ? format(new Date(o.closedAt), "HH:mm") : "";
-      csv += `${o.id},${d},${t},${o.status},${o.total.toFixed(2)},${o.paymentMethod || ""}\n`;
+      const payment = (o.splitPayments && o.splitPayments.length > 0) 
+        ? "Múltiplo: " + o.splitPayments.map((sp:any) => `${sp.method} R$ ${sp.amount}`).join(" | ")
+        : (o.paymentMethod || "");
+      csv += `${o.id},${d},${t},${o.status},${o.total.toFixed(2)},"${payment}"\n`;
     });
 
     // Add products detail
@@ -333,14 +361,26 @@ export default function Relatorios() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="text-sm border-none focus:ring-0 p-0"
+              className="text-sm border-none focus:ring-0 p-0 mr-2"
             />
-            <span className="mx-2 text-gray-400">até</span>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className="text-sm border-none focus:ring-0 p-0 text-gray-500"
+            />
+            <span className="mx-3 text-gray-400">até</span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="text-sm border-none focus:ring-0 p-0"
+              className="text-sm border-none focus:ring-0 p-0 mr-2"
+            />
+            <input
+              type="time"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              className="text-sm border-none focus:ring-0 p-0 text-gray-500"
             />
           </div>
         </div>

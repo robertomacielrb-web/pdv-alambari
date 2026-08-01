@@ -23,6 +23,7 @@ import {
   Search,
   Truck,
   MessageCircle,
+  Wallet,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
@@ -56,8 +57,9 @@ export default function Delivery() {
   const [lastPassword, setLastPassword] = useState<number | null>(null);
   const [lastOrder, setLastOrder] = useState<any | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<
-    "dinheiro" | "cartao" | "pix"
+    "dinheiro" | "cartao" | "pix" | "multiplo"
   >("dinheiro");
+  const [splitPayments, setSplitPayments] = useState({ dinheiro: "", cartao: "", pix: "" });
   const [discount, setDiscount] = useState<number | "">("");
   const [customerName, setCustomerName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -355,6 +357,22 @@ export default function Delivery() {
       return;
     }
 
+    let finalSplitPayments = undefined;
+    if (paymentMethod === "multiplo") {
+      const dinheiroVal = Number(splitPayments.dinheiro) || 0;
+      const cartaoVal = Number(splitPayments.cartao) || 0;
+      const pixVal = Number(splitPayments.pix) || 0;
+      const totalSplit = dinheiroVal + cartaoVal + pixVal;
+      if (Math.abs(totalSplit - Number(total)) > 0.01) {
+         alert(`A soma dos pagamentos (R$ ${totalSplit.toFixed(2).replace('.', ',')}) não confere com o total (R$ ${Number(total).toFixed(2).replace('.', ',')}).`);
+         return;
+      }
+      finalSplitPayments = [];
+      if (dinheiroVal > 0) finalSplitPayments.push({ method: "dinheiro", amount: dinheiroVal });
+      if (cartaoVal > 0) finalSplitPayments.push({ method: "cartao", amount: cartaoVal });
+      if (pixVal > 0) finalSplitPayments.push({ method: "pix", amount: pixVal });
+    }
+
     setIsProcessing(true);
     try {
       const password = await getNextPassword(currentSession.id);
@@ -373,6 +391,7 @@ export default function Delivery() {
         total: Number(total) || 0,
         discount: Number(discount) || 0,
         paymentMethod: paymentMethod || "dinheiro",
+        splitPayments: finalSplitPayments || [],
         customerName,
         deliveryPhone: phoneNumber,
         deliveryAddress: address,
@@ -401,6 +420,7 @@ export default function Delivery() {
       setDeliveryFee(0);
       setObservations("");
       setDiscount("");
+      setSplitPayments({ dinheiro: "", cartao: "", pix: "" });
       setStep(1);
     } catch (error: any) {
       alert(
@@ -729,7 +749,7 @@ export default function Delivery() {
                 <p className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-widest">
                   Forma de Pagamento
                 </p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     onClick={() => setPaymentMethod("dinheiro")}
                     className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 font-bold transition-all ${
@@ -763,7 +783,42 @@ export default function Delivery() {
                     <QrCode className="w-5 h-5 mb-1" />
                     <span className="text-xs text-center">PIX</span>
                   </button>
+                  <button
+                    onClick={() => setPaymentMethod("multiplo")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 font-bold transition-all ${
+                      paymentMethod === "multiplo"
+                        ? "bg-teal-50 border-teal-500 text-teal-700 shadow-md"
+                        : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    <Wallet className="w-5 h-5 mb-1" />
+                    <span className="text-xs text-center">Múltiplo</span>
+                  </button>
                 </div>
+
+                {paymentMethod === "multiplo" && (
+                  <div className="mt-4 p-4 border border-teal-200 bg-teal-50 rounded-xl space-y-3">
+                    <h4 className="font-bold text-teal-800 text-sm">Valores por método:</h4>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">Dinheiro:</span>
+                      <input type="number" step="0.01" min="0" value={splitPayments.dinheiro} onChange={e => setSplitPayments({...splitPayments, dinheiro: e.target.value})} className="w-24 border border-teal-200 rounded p-1 text-right outline-none focus:border-teal-500" placeholder="0,00" />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">Cartão:</span>
+                      <input type="number" step="0.01" min="0" value={splitPayments.cartao} onChange={e => setSplitPayments({...splitPayments, cartao: e.target.value})} className="w-24 border border-teal-200 rounded p-1 text-right outline-none focus:border-teal-500" placeholder="0,00" />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">PIX:</span>
+                      <input type="number" step="0.01" min="0" value={splitPayments.pix} onChange={e => setSplitPayments({...splitPayments, pix: e.target.value})} className="w-24 border border-teal-200 rounded p-1 text-right outline-none focus:border-teal-500" placeholder="0,00" />
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-teal-200">
+                      <span className="text-sm font-bold text-teal-800">Soma / Total:</span>
+                      <span className={`text-sm font-bold ${Math.abs((Number(splitPayments.dinheiro) || 0) + (Number(splitPayments.cartao) || 0) + (Number(splitPayments.pix) || 0) - total) > 0.01 ? 'text-red-600' : 'text-green-600'}`}>
+                        R$ {((Number(splitPayments.dinheiro) || 0) + (Number(splitPayments.cartao) || 0) + (Number(splitPayments.pix) || 0)).toFixed(2).replace('.', ',')} / R$ {total.toFixed(2).replace('.', ',')}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

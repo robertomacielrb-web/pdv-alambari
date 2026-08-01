@@ -196,12 +196,24 @@ export default function Caixa() {
         const val = Number(data.total) || 0;
         totalSales += val;
         
-        const pt = data.paymentMethod;
-        if (pt === "dinheiro") dinheiro += val;
-        else if (pt === "cartao") cartao += val;
-        else if (pt === "pix") pix += val;
-        else if (pt === "fiado") fiado += val;
-        else outros += val;
+        if (data.splitPayments && data.splitPayments.length > 0) {
+          data.splitPayments.forEach((sp: any) => {
+            const spVal = Number(sp.amount) || 0;
+            const pt = sp.method;
+            if (pt === "dinheiro") dinheiro += spVal;
+            else if (pt === "cartao") cartao += spVal;
+            else if (pt === "pix") pix += spVal;
+            else if (pt === "fiado") fiado += spVal;
+            else outros += spVal;
+          });
+        } else {
+          const pt = data.paymentMethod;
+          if (pt === "dinheiro") dinheiro += val;
+          else if (pt === "cartao") cartao += val;
+          else if (pt === "pix") pix += val;
+          else if (pt === "fiado") fiado += val;
+          else outros += val;
+        }
       });
 
       const finalBalance = currentSession.initialBalance + totalSales;

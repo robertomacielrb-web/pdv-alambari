@@ -29,6 +29,7 @@ import {
   Search,
   Filter,
   NotebookText,
+  Wallet,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
@@ -86,8 +87,9 @@ export default function Mesas() {
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<
-    "dinheiro" | "cartao" | "pix" | "fiado"
+    "dinheiro" | "cartao" | "pix" | "fiado" | "multiplo"
   >("dinheiro");
+  const [splitPayments, setSplitPayments] = useState({ dinheiro: "", cartao: "", pix: "" });
   const [discount, setDiscount] = useState<number | "">("");
   const [step, setStep] = useState<1 | 2>(1);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -244,6 +246,8 @@ export default function Mesas() {
     setCustomerName("");
     setCustomerPhone("");
     setObservations("");
+    setDiscount("");
+    setSplitPayments({ dinheiro: "", cartao: "", pix: "" });
   };
 
   const handleUpdateCustomerName = async (newName: string) => {
@@ -721,6 +725,22 @@ export default function Mesas() {
       return;
     }
 
+    let finalSplitPayments = undefined;
+    if (paymentMethod === "multiplo") {
+      const dinheiroVal = Number(splitPayments.dinheiro) || 0;
+      const cartaoVal = Number(splitPayments.cartao) || 0;
+      const pixVal = Number(splitPayments.pix) || 0;
+      const totalSplit = dinheiroVal + cartaoVal + pixVal;
+      if (Math.abs(totalSplit - Number(total)) > 0.01) {
+         alert(`A soma dos pagamentos (R$ ${totalSplit.toFixed(2).replace('.', ',')}) não confere com o total (R$ ${Number(total).toFixed(2).replace('.', ',')}).`);
+         return;
+      }
+      finalSplitPayments = [];
+      if (dinheiroVal > 0) finalSplitPayments.push({ method: "dinheiro", amount: dinheiroVal });
+      if (cartaoVal > 0) finalSplitPayments.push({ method: "cartao", amount: cartaoVal });
+      if (pixVal > 0) finalSplitPayments.push({ method: "pix", amount: pixVal });
+    }
+
     setIsProcessing(true);
     try {
       const tableQuery = query(
@@ -767,6 +787,7 @@ export default function Mesas() {
 
       if (!isFiado) {
         orderUpdatePayload.paymentMethod = paymentMethod;
+        orderUpdatePayload.splitPayments = finalSplitPayments || [];
         orderUpdatePayload.closedAt = new Date().toISOString();
         orderUpdatePayload.password = existingOrder?.password || await getNextPassword(currentSession.id);
       }
@@ -1185,7 +1206,7 @@ export default function Mesas() {
                       <p className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-widest">
                         Escolha a Forma de Pagamento
                       </p>
-                      <div className="grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                         <button
                           onClick={() => setPaymentMethod("dinheiro")}
                           className={`flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border-2 font-bold transition-all ${
@@ -1238,7 +1259,44 @@ export default function Mesas() {
                             Fiado
                           </span>
                         </button>
+                        <button
+                          onClick={() => setPaymentMethod("multiplo")}
+                          className={`flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border-2 font-bold transition-all ${
+                            paymentMethod === "multiplo"
+                              ? "bg-teal-50 border-teal-500 text-teal-700 shadow-md"
+                              : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                          }`}
+                        >
+                          <Wallet className="w-6 h-6 sm:w-8 h-8 mb-1 sm:mb-2" />
+                          <span className="text-xs sm:text-base text-center">
+                            Múltiplo
+                          </span>
+                        </button>
                       </div>
+
+                      {paymentMethod === "multiplo" && (
+                        <div className="mt-4 p-4 border border-teal-200 bg-teal-50 rounded-xl space-y-3">
+                          <h4 className="font-bold text-teal-800 text-sm">Valores por método:</h4>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-700">Dinheiro:</span>
+                            <input type="number" step="0.01" min="0" value={splitPayments.dinheiro} onChange={e => setSplitPayments({...splitPayments, dinheiro: e.target.value})} className="w-24 border border-teal-200 rounded p-1 text-right outline-none focus:border-teal-500" placeholder="0,00" />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-700">Cartão:</span>
+                            <input type="number" step="0.01" min="0" value={splitPayments.cartao} onChange={e => setSplitPayments({...splitPayments, cartao: e.target.value})} className="w-24 border border-teal-200 rounded p-1 text-right outline-none focus:border-teal-500" placeholder="0,00" />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-700">PIX:</span>
+                            <input type="number" step="0.01" min="0" value={splitPayments.pix} onChange={e => setSplitPayments({...splitPayments, pix: e.target.value})} className="w-24 border border-teal-200 rounded p-1 text-right outline-none focus:border-teal-500" placeholder="0,00" />
+                          </div>
+                          <div className="flex justify-between items-center pt-2 border-t border-teal-200">
+                            <span className="text-sm font-bold text-teal-800">Soma / Total:</span>
+                            <span className={`text-sm font-bold ${Math.abs((Number(splitPayments.dinheiro) || 0) + (Number(splitPayments.cartao) || 0) + (Number(splitPayments.pix) || 0) - total) > 0.01 ? 'text-red-600' : 'text-green-600'}`}>
+                              R$ {((Number(splitPayments.dinheiro) || 0) + (Number(splitPayments.cartao) || 0) + (Number(splitPayments.pix) || 0)).toFixed(2).replace('.', ',')} / R$ {total.toFixed(2).replace('.', ',')}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 

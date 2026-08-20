@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Plus, Edit2, Trash2, X, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, AlertTriangle, Search } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -22,6 +22,8 @@ export default function Produtos() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({ name: '', price: '', costPrice: '', wholesalePrice: '', category: '', stock: '', unit: 'unidade', erpOnly: false });
   const [isNewCategory, setIsNewCategory] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -42,15 +44,23 @@ export default function Produtos() {
     return () => unsubscribe();
   }, []);
 
+  const categories = Array.from(new Set(products.map(p => p.category))).sort();
+
   const groupedProducts = useMemo(() => {
-    return products.reduce((acc, product) => {
+    const filtered = products.filter(p => {
+      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+
+    return filtered.reduce((acc, product) => {
       if (!acc[product.category]) {
         acc[product.category] = [];
       }
       acc[product.category].push(product);
       return acc;
     }, {} as Record<string, Product[]>);
-  }, [products]);
+  }, [products, searchTerm, selectedCategory]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,15 +173,53 @@ export default function Produtos() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold text-gray-800">Produtos</h1>
+        <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar produtos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow bg-white"
+            />
+          </div>
+          <button
+            onClick={() => openModal()}
+            className="w-full sm:w-auto bg-red-600 text-white px-4 py-2 rounded-md flex items-center justify-center hover:bg-red-700 whitespace-nowrap"
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            Novo Produto
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-6 flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
         <button
-          onClick={() => openModal()}
-          className="bg-red-600 text-white px-4 py-2 rounded-md flex items-center hover:bg-red-700"
+          onClick={() => setSelectedCategory('all')}
+          className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+            selectedCategory === 'all'
+              ? 'bg-gray-800 text-white shadow-sm'
+              : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+          }`}
         >
-          <Plus className="w-5 h-5 mr-2" />
-          Novo Produto
+          Todas as Categorias
         </button>
+        {categories.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setSelectedCategory(cat)}
+            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+              selectedCategory === cat
+                ? 'bg-gray-800 text-white shadow-sm'
+                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -190,7 +238,9 @@ export default function Produtos() {
           <tbody className="bg-white divide-y divide-gray-200">
             {Object.entries(groupedProducts).length === 0 ? (
                <tr>
-                 <td colSpan={7} className="px-6 py-4 text-center text-gray-500">Nenhum produto cadastrado.</td>
+                 <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                   Nenhum produto encontrado.
+                 </td>
                </tr>
             ) : (
               Object.keys(groupedProducts).sort().map(category => (

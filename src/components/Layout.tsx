@@ -26,6 +26,7 @@ export default function Layout() {
     { name: 'Mesas', href: '/mesas', icon: Coffee },
     { name: 'Fiados', href: '/fiados', icon: Users },
     { name: 'Delivery', href: '/delivery', icon: Truck },
+    { name: 'ERP / Atacado', href: '/erp', icon: Package },
     { name: 'Produção', href: '/producao', icon: ChefHat },
     { name: 'Produtos', href: '/produtos', icon: Package },
     { name: 'Histórico', href: '/historico', icon: History },

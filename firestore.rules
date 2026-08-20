@@ -65,25 +65,43 @@ service cloud.firestore {
              isValidString(data.name, 1, 100) &&
              isValidNumber(data.price, 0) &&
              isValidString(data.category, 1, 50) &&
-             isValidDateString(data.createdAt);
+             isValidDateString(data.createdAt) &&
+             (!('wholesalePrice' in data) || isValidNumber(data.wholesalePrice, 0)) &&
+             (!('costPrice' in data) || isValidNumber(data.costPrice, 0)) &&
+             (!('stock' in data) || isValidNumber(data.stock, 0)) &&
+             (!('unit' in data) || (data.unit == 'unidade' || data.unit == 'kg')) &&
+             (!('erpOnly' in data) || data.erpOnly is bool);
+    }
+
+    function isValidCustomer(data) {
+      return data.keys().hasAll(['name']) &&
+             isValidString(data.name, 1, 150) &&
+             (!('document' in data) || data.document is string) &&
+             (!('phone' in data) || data.phone is string) &&
+             (!('address' in data) || data.address is string) &&
+             (!('createdAt' in data) || data.createdAt is string);
     }
 
     function isValidOrder(data) {
       return data.keys().hasAll(['type', 'status', 'items', 'total', 'createdAt']) &&
-             (data.type == 'balcao' || data.type == 'mesa' || data.type == 'fiado' || data.type == 'delivery') &&
+             (data.type == 'balcao' || data.type == 'mesa' || data.type == 'fiado' || data.type == 'delivery' || data.type == 'atacado') &&
              (data.status == 'open' || data.status == 'closed') &&
              data.items is list && data.items.size() <= 100 &&
              isValidNumber(data.total, 0) &&
              isValidDateString(data.createdAt) &&
-             (!('paymentMethod' in data) || (data.paymentMethod == 'dinheiro' || data.paymentMethod == 'cartao' || data.paymentMethod == 'pix')) &&
-             (!('closedAt' in data) || isValidDateString(data.closedAt)) &&
+             (!('paymentMethod' in data) || (data.paymentMethod == 'dinheiro' || data.paymentMethod == 'cartao' || data.paymentMethod == 'pix' || data.paymentMethod == 'fiado' || data.paymentMethod == 'multiplo')) &&
+             (!('closedAt' in data) || data.closedAt == null || isValidDateString(data.closedAt)) &&
              (!('password' in data) || data.password is number) &&
              (!('tableNumber' in data) || data.tableNumber is number) &&
              (!('customerName' in data) || data.customerName == '' || isValidString(data.customerName, 1, 100)) &&
+             (!('customerId' in data) || data.customerId is string) &&
              (!('customerPhone' in data) || data.customerPhone is string) &&
              (!('observations' in data) || data.observations == '' || isValidString(data.observations, 1, 500)) &&
              (!('cashierId' in data) || data.cashierId is string) &&
+             (!('sessionId' in data) || data.sessionId is string) &&
              (!('deliveryFee' in data) || data.deliveryFee is number) &&
+             (!('discount' in data) || data.discount is number) &&
+             (!('splitPayments' in data) || data.splitPayments is list) &&
              (!('deliveryPhone' in data) || data.deliveryPhone is string) &&
              (!('deliveryAddress' in data) || data.deliveryAddress is string);
     }
@@ -149,6 +167,13 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidTable(request.resource.data);
       allow update: if isValidTable(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /erp_customers/{customerId} {
+      allow read: if true;
+      allow create: if isValidCustomer(request.resource.data);
+      allow update: if isValidCustomer(request.resource.data);
       allow delete: if true;
     }
 

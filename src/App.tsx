@@ -16,6 +16,8 @@ import Cardapio from './pages/Cardapio';
 import ContasPagar from './pages/ContasPagar';
 import FluxoCaixa from './pages/FluxoCaixa';
 
+import ERP from './pages/ERP';
+
 function AppRoutes() {
   return (
     <Routes>
@@ -33,6 +35,7 @@ function AppRoutes() {
         <Route path="configuracoes" element={<Configuracoes />} />
         <Route path="contas-pagar" element={<ContasPagar />} />
         <Route path="fluxo-caixa" element={<FluxoCaixa />} />
+        <Route path="erp" element={<ERP />} />
       </Route>
     </Routes>
   );

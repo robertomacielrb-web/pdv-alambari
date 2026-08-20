@@ -88,6 +88,7 @@ export default function Delivery() {
       const prods: Product[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
+        if (data.erpOnly) return; // Do not show ERP-only products here
         const normalizedCategory = data.category
           ? data.category.trim()
           : "";

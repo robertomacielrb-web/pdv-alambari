@@ -37,6 +37,7 @@ export default function Cardapio() {
       const prods: Product[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
+        if (data.erpOnly) return; // Do not show ERP-only products here
         prods.push({
           id: doc.id,
           ...data,

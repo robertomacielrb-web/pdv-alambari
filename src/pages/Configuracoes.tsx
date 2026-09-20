@@ -10,6 +10,7 @@ export default function Configuracoes() {
   const [isLoading, setIsLoading] = useState(false);
   
   const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [pixKey, setPixKey] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [isDownloadingBackup, setIsDownloadingBackup] = useState(false);
 
@@ -25,7 +26,9 @@ export default function Configuracoes() {
         const docRef = doc(db, 'settings', 'store');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          setWhatsappNumber(docSnap.data().whatsappNumber || '');
+          const data = docSnap.data();
+          setWhatsappNumber(data.whatsappNumber || '');
+          setPixKey(data.pixKey || '');
         }
       } catch (error) {
         console.error("Error loading settings:", error);
@@ -39,6 +42,7 @@ export default function Configuracoes() {
     try {
       await setDoc(doc(db, 'settings', 'store'), {
         whatsappNumber,
+        pixKey,
         updatedAt: new Date().toISOString()
       }, { merge: true });
       alert('Configurações da loja salvas com sucesso!');
@@ -179,8 +183,22 @@ export default function Configuracoes() {
               placeholder="Ex: 5511999999999"
               className="w-full border-2 border-gray-200 rounded-lg p-3 text-sm focus:border-indigo-500 outline-none"
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 mt-1 mb-4">
               Apenas números com DDD. Inclua o código do país (ex: 55 para o Brasil).
+            </p>
+
+            <label className="block text-sm font-bold text-gray-700 mb-1">
+              Chave Pix (Para recebimentos e propostas de eventos)
+            </label>
+            <input
+              type="text"
+              value={pixKey}
+              onChange={(e) => setPixKey(e.target.value)}
+              placeholder="Ex: CNPJ, Telefone, E-mail ou Chave Aleatória"
+              className="w-full border-2 border-gray-200 rounded-lg p-3 text-sm focus:border-indigo-500 outline-none"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Esta chave será incluída automaticamente nas propostas de orçamento de churrasco para cobrança do sinal.
             </p>
           </div>
 

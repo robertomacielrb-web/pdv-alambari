@@ -14,7 +14,8 @@ import {
   BarChart2,
   Settings,
   Receipt,
-  Activity
+  Activity,
+  Flame
 } from 'lucide-react';
 
 export default function Layout() {
@@ -26,6 +27,7 @@ export default function Layout() {
     { name: 'Mesas', href: '/mesas', icon: Coffee },
     { name: 'Fiados', href: '/fiados', icon: Users },
     { name: 'Delivery', href: '/delivery', icon: Truck },
+    { name: 'Eventos / Churrasco', href: '/churrasco', icon: Flame },
     { name: 'ERP / Atacado', href: '/erp', icon: Package },
     { name: 'Produção', href: '/producao', icon: ChefHat },
     { name: 'Produtos', href: '/produtos', icon: Package },

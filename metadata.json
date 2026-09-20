@@ -1,6 +1,6 @@
 {
   "name": "PDV ALAMBARI DEFUMADOS",
-  "description": "Aplicativo de Ponto de Venda (PDV) com controle de vendas, mesas, fiado e caixa.",
+  "description": "Aplicativo de Ponto de Venda (PDV) com controle de vendas, ERP atacado, orçamento de eventos de churrasco com calculadora de carne e envio de propostas via WhatsApp.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1,7 +1,21 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { Plus, Edit2, Trash2, X, AlertTriangle, Search } from 'lucide-react';
+import { 
+  Plus, 
+  Edit2, 
+  Trash2, 
+  X, 
+  AlertTriangle, 
+  Search, 
+  ChevronLeft, 
+  ChevronRight, 
+  SlidersHorizontal, 
+  RotateCcw, 
+  Filter, 
+  DollarSign, 
+  Package 
+} from 'lucide-react';
 
 interface Product {
   id: string;
@@ -24,6 +38,11 @@ export default function Produtos() {
   const [isNewCategory, setIsNewCategory] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [priceFilter, setPriceFilter] = useState<number | null>(null);
+  const [showFilters, setShowFilters] = useState<boolean>(true);
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'available' | 'out'>('all');
+  const [unitFilter, setUnitFilter] = useState<'all' | 'unidade' | 'kg'>('all');
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -46,11 +65,54 @@ export default function Produtos() {
 
   const categories = Array.from(new Set(products.map(p => p.category))).sort();
 
+  const highestProductPrice = useMemo(() => {
+    if (products.length === 0) return 100;
+    const max = Math.max(...products.map(p => p.price || 0));
+    return Math.ceil(max > 0 ? max : 100);
+  }, [products]);
+
+  const activePriceLimit = priceFilter !== null ? priceFilter : highestProductPrice;
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    products.forEach(p => {
+      counts[p.category] = (counts[p.category] || 0) + 1;
+    });
+    return counts;
+  }, [products]);
+
+  const scrollCategories = (direction: 'left' | 'right') => {
+    if (categoryScrollRef.current) {
+      const scrollAmount = direction === 'left' ? -220 : 220;
+      categoryScrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
+
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setSelectedCategory('all');
+    setPriceFilter(null);
+    setStockFilter('all');
+    setUnitFilter('all');
+  };
+
+  const hasActiveFilters = searchTerm !== '' || selectedCategory !== 'all' || priceFilter !== null || stockFilter !== 'all' || unitFilter !== 'all';
+
   const groupedProducts = useMemo(() => {
     const filtered = products.filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
-      return matchesSearch && matchesCategory;
+      const matchesPrice = priceFilter !== null ? p.price <= priceFilter : true;
+      const matchesUnit = unitFilter !== 'all' ? (p.unit || 'unidade') === unitFilter : true;
+      let matchesStock = true;
+      if (stockFilter === 'low') {
+        matchesStock = p.stock !== undefined && p.stock <= 5;
+      } else if (stockFilter === 'available') {
+        matchesStock = p.stock !== undefined ? p.stock > 0 : true;
+      } else if (stockFilter === 'out') {
+        matchesStock = p.stock !== undefined && p.stock === 0;
+      }
+      return matchesSearch && matchesCategory && matchesPrice && matchesUnit && matchesStock;
     });
 
     return filtered.reduce((acc, product) => {
@@ -60,7 +122,11 @@ export default function Produtos() {
       acc[product.category].push(product);
       return acc;
     }, {} as Record<string, Product[]>);
-  }, [products, searchTerm, selectedCategory]);
+  }, [products, searchTerm, selectedCategory, priceFilter, unitFilter, stockFilter]);
+
+  const totalFilteredCount = useMemo(() => {
+    return Object.values(groupedProducts).reduce((sum, list) => sum + list.length, 0);
+  }, [groupedProducts]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,128 +238,420 @@ export default function Produtos() {
   };
 
   return (
-    <div>
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <h1 className="text-2xl font-bold text-gray-800">Produtos</h1>
-        <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-          <div className="relative w-full sm:w-64">
-            <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+    <div className="space-y-5">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Catálogo de Produtos</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Gerencie o estoque, preços de venda, atacado e insumos da loja
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-64">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar produtos..."
+              placeholder="Buscar por nome..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow bg-white"
+              className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow bg-white"
             />
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`px-3 py-2 text-xs font-semibold rounded-lg border flex items-center gap-1.5 transition-colors ${
+              showFilters || hasActiveFilters
+                ? 'bg-red-50 border-red-200 text-red-700'
+                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            <span>Filtros & Sliders</span>
+            {hasActiveFilters && (
+              <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse ml-0.5" />
+            )}
+          </button>
+
           <button
             onClick={() => openModal()}
-            className="w-full sm:w-auto bg-red-600 text-white px-4 py-2 rounded-md flex items-center justify-center hover:bg-red-700 whitespace-nowrap"
+            className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center justify-center hover:bg-red-700 shadow-xs transition-colors whitespace-nowrap"
           >
-            <Plus className="w-5 h-5 mr-2" />
+            <Plus className="w-4 h-4 mr-1.5" />
             Novo Produto
           </button>
         </div>
       </div>
 
-      <div className="mb-6 flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
+      {/* Category Sliding Bar (Barra Deslizante com Controles de Navegação Suave) */}
+      <div className="relative flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-200 shadow-2xs">
         <button
-          onClick={() => setSelectedCategory('all')}
-          className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-            selectedCategory === 'all'
-              ? 'bg-gray-800 text-white shadow-sm'
-              : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
-          }`}
+          type="button"
+          onClick={() => scrollCategories('left')}
+          className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 shrink-0 transition-colors"
+          title="Deslizar categorias para a esquerda"
         >
-          Todas as Categorias
+          <ChevronLeft className="w-4 h-4" />
         </button>
-        {categories.map((cat) => (
+
+        <div
+          ref={categoryScrollRef}
+          className="flex-1 flex space-x-2 overflow-x-auto py-1 scrollbar-thin scroll-smooth"
+        >
           <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-              selectedCategory === cat
-                ? 'bg-gray-800 text-white shadow-sm'
-                : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+            onClick={() => setSelectedCategory('all')}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+              selectedCategory === 'all'
+                ? 'bg-gray-900 text-white shadow-xs'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            {cat}
+            <span>Todas as Categorias</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                selectedCategory === 'all' ? 'bg-gray-700 text-gray-200' : 'bg-gray-200 text-gray-700'
+              }`}
+            >
+              {products.length}
+            </span>
           </button>
-        ))}
+
+          {categories.map((cat) => {
+            const count = categoryCounts[cat] || 0;
+            const isSelected = selectedCategory === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  isSelected
+                    ? 'bg-red-600 text-white shadow-xs'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <span>{cat}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    isSelected ? 'bg-red-800 text-red-100' : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => scrollCategories('right')}
+          className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 shrink-0 transition-colors"
+          title="Deslizar categorias para a direita"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Varejo</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Atacado</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Custo</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estoque</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {Object.entries(groupedProducts).length === 0 ? (
-               <tr>
-                 <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                   Nenhum produto encontrado.
-                 </td>
-               </tr>
-            ) : (
-              Object.keys(groupedProducts).sort().map(category => (
-                <React.Fragment key={category}>
-                  <tr className="bg-gray-100/80">
-                    <td colSpan={7} className="px-6 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-y border-gray-200">
-                      {category}
-                    </td>
-                  </tr>
-                  {groupedProducts[category].sort((a,b) => a.name.localeCompare(b.name)).map((product) => (
-                    <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {product.name}
-                        {product.unit === 'kg' && <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">KG</span>}
-                        {product.erpOnly && <span className="ml-2 text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">Apenas ERP</span>}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.category}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        R$ {product.price.toFixed(2).replace('.', ',')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {product.wholesalePrice !== undefined ? `R$ ${product.wholesalePrice.toFixed(2).replace('.', ',')}` : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {product.costPrice !== undefined ? `R$ ${product.costPrice.toFixed(2).replace('.', ',')}` : '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <div className="flex items-center">
-                          <span className={`font-semibold ${product.stock !== undefined && product.stock <= 5 ? 'text-red-600' : 'text-gray-700'}`}>
-                            {product.stock !== undefined ? `${product.stock} ${product.unit === 'kg' ? 'kg' : 'un'}` : '-'}
+      {/* Interactive Filters Panel with Range Sliders (Barras Deslizantes Interativas) */}
+      {showFilters && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
+            <div className="flex items-center gap-2 text-gray-800 font-bold text-sm">
+              <SlidersHorizontal className="w-4 h-4 text-red-600" />
+              <span>Ajustes Deslizantes & Filtros do Catálogo</span>
+            </div>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="text-xs text-red-600 hover:text-red-800 font-semibold flex items-center gap-1 transition-colors self-start sm:self-auto"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Limpar Filtros Ativos
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Slider 1: Barra Deslizante de Preço Máximo */}
+            <div className="space-y-2 bg-gray-50/70 p-3 rounded-lg border border-gray-200">
+              <div className="flex justify-between items-center text-xs font-semibold text-gray-700">
+                <span className="flex items-center gap-1 text-gray-900">
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                  Barra de Preço Varejo
+                </span>
+                <span className="text-red-700 font-bold bg-red-50 border border-red-200 px-2 py-0.5 rounded-md">
+                  {priceFilter !== null
+                    ? `Até R$ ${priceFilter.toFixed(2).replace('.', ',')}`
+                    : `Até R$ ${highestProductPrice.toFixed(2).replace('.', ',')} (Máx)`}
+                </span>
+              </div>
+
+              <input
+                type="range"
+                min="0"
+                max={highestProductPrice}
+                step="1"
+                value={activePriceLimit}
+                onChange={(e) => setPriceFilter(parseFloat(e.target.value))}
+                className="custom-range-slider cursor-pointer"
+              />
+
+              <div className="flex justify-between text-[11px] text-gray-500 font-medium">
+                <span>R$ 0,00</span>
+                <button
+                  type="button"
+                  onClick={() => setPriceFilter(null)}
+                  className="text-red-600 hover:underline text-[10px]"
+                >
+                  Sem limite
+                </button>
+                <span>R$ {highestProductPrice.toFixed(2).replace('.', ',')}</span>
+              </div>
+            </div>
+
+            {/* Slider/Control 2: Nível e Status de Estoque */}
+            <div className="space-y-2 bg-gray-50/70 p-3 rounded-lg border border-gray-200">
+              <div className="flex justify-between items-center text-xs font-semibold text-gray-700">
+                <span className="flex items-center gap-1 text-gray-900">
+                  <Package className="w-3.5 h-3.5 text-amber-600" />
+                  Controle de Estoque
+                </span>
+                <span className="text-gray-500 font-normal text-[11px]">
+                  {stockFilter === 'low'
+                    ? '⚠️ Baixo (≤ 5)'
+                    : stockFilter === 'available'
+                    ? 'Em Estoque'
+                    : stockFilter === 'out'
+                    ? 'Esgotado'
+                    : 'Todos'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setStockFilter('all')}
+                  className={`text-xs py-1 px-2 rounded-md font-medium transition-colors ${
+                    stockFilter === 'all'
+                      ? 'bg-gray-800 text-white font-semibold'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStockFilter('available')}
+                  className={`text-xs py-1 px-2 rounded-md font-medium transition-colors ${
+                    stockFilter === 'available'
+                      ? 'bg-emerald-600 text-white font-semibold'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Disponíveis
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStockFilter('low')}
+                  className={`text-xs py-1 px-2 rounded-md font-medium transition-colors ${
+                    stockFilter === 'low'
+                      ? 'bg-amber-600 text-white font-semibold'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Baixo Estoque (≤5)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStockFilter('out')}
+                  className={`text-xs py-1 px-2 rounded-md font-medium transition-colors ${
+                    stockFilter === 'out'
+                      ? 'bg-red-600 text-white font-semibold'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Zerados (0)
+                </button>
+              </div>
+            </div>
+
+            {/* Control 3: Unidade de Medida */}
+            <div className="space-y-2 bg-gray-50/70 p-3 rounded-lg border border-gray-200">
+              <div className="flex justify-between items-center text-xs font-semibold text-gray-700">
+                <span className="flex items-center gap-1 text-gray-900">
+                  <Filter className="w-3.5 h-3.5 text-blue-600" />
+                  Unidade de Medida
+                </span>
+                <span className="text-gray-500 font-normal text-[11px]">
+                  {unitFilter === 'all' ? 'Todas' : unitFilter === 'kg' ? 'Quilo (KG)' : 'Unidade (UN)'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setUnitFilter('all')}
+                  className={`text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
+                    unitFilter === 'all'
+                      ? 'bg-gray-800 text-white font-semibold'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Todas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUnitFilter('kg')}
+                  className={`text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
+                    unitFilter === 'kg'
+                      ? 'bg-blue-600 text-white font-semibold'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Por Quilo (KG)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUnitFilter('unidade')}
+                  className={`text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
+                    unitFilter === 'unidade'
+                      ? 'bg-indigo-600 text-white font-semibold'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Unidade (UN)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Results summary bar */}
+      <div className="flex justify-between items-center text-xs text-gray-500 px-1">
+        <span>
+          Exibindo <strong className="text-gray-900">{totalFilteredCount}</strong> de {products.length} produtos cadastrados
+        </span>
+        <span className="hidden sm:inline text-[11px] text-gray-400">
+          💡 Dica: Role horizontalmente a tabela em telas compactas
+        </span>
+      </div>
+
+      {/* Main Table with Smooth Horizontal Scrolling */}
+      <div className="bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoria</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Varejo</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Atacado</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Custo</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Estoque</th>
+                <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {Object.entries(groupedProducts).length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                    <div className="max-w-xs mx-auto space-y-2">
+                      <Search className="w-8 h-8 text-gray-300 mx-auto" />
+                      <p className="font-semibold text-gray-700">Nenhum produto encontrado</p>
+                      <p className="text-xs text-gray-400">Tente ajustar o termo de busca ou redefinir as barras de filtros.</p>
+                      {hasActiveFilters && (
+                        <button
+                          type="button"
+                          onClick={handleResetFilters}
+                          className="mt-2 text-xs bg-red-50 text-red-700 border border-red-200 px-3 py-1.5 rounded-lg font-bold"
+                        >
+                          Limpar Filtros
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                Object.keys(groupedProducts).sort().map(category => (
+                  <React.Fragment key={category}>
+                    <tr className="bg-gray-100/75">
+                      <td colSpan={7} className="px-5 py-2 text-left text-xs font-bold text-gray-700 uppercase tracking-wider border-y border-gray-200">
+                        <span className="flex items-center justify-between">
+                          <span>{category}</span>
+                          <span className="text-[11px] font-normal text-gray-500 lowercase">
+                            {groupedProducts[category].length} {groupedProducts[category].length === 1 ? 'item' : 'itens'}
                           </span>
-                          {product.stock !== undefined && product.stock <= 5 && (
-                            <span title="Estoque baixo">
-                              <AlertTriangle className="w-4 h-4 ml-2 text-red-500 animate-pulse" />
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onClick={() => openModal(product)} className="text-red-600 hover:text-red-900 mr-4">
-                          <Edit2 className="w-5 h-5" />
-                        </button>
-                        <button onClick={() => handleDelete(product.id)} className="text-red-600 hover:text-red-900">
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                        </span>
                       </td>
                     </tr>
-                  ))}
-                </React.Fragment>
-              ))
-            )}
-          </tbody>
-        </table>
+                    {groupedProducts[category].sort((a,b) => a.name.localeCompare(b.name)).map((product) => (
+                      <tr key={product.id} className="hover:bg-gray-50/80 transition-colors">
+                        <td className="px-5 py-3.5 whitespace-nowrap text-sm font-medium text-gray-900">
+                          <div className="flex items-center gap-1.5">
+                            <span>{product.name}</span>
+                            {product.unit === 'kg' && (
+                              <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded">
+                                KG
+                              </span>
+                            )}
+                            {product.erpOnly && (
+                              <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-1.5 py-0.5 rounded">
+                                Apenas ERP
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-sm text-gray-500">{product.category}</td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-sm font-semibold text-gray-900">
+                          R$ {product.price.toFixed(2).replace('.', ',')}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-sm text-gray-600">
+                          {product.wholesalePrice !== undefined ? `R$ ${product.wholesalePrice.toFixed(2).replace('.', ',')}` : '-'}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-sm text-gray-500">
+                          {product.costPrice !== undefined ? `R$ ${product.costPrice.toFixed(2).replace('.', ',')}` : '-'}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-sm text-gray-500">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`font-semibold ${product.stock !== undefined && product.stock <= 5 ? 'text-red-600' : 'text-gray-800'}`}>
+                              {product.stock !== undefined ? `${product.stock} ${product.unit === 'kg' ? 'kg' : 'un'}` : '-'}
+                            </span>
+                            {product.stock !== undefined && product.stock <= 5 && (
+                              <span title="Estoque baixo">
+                                <AlertTriangle className="w-3.5 h-3.5 text-red-500 animate-pulse" />
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-right text-sm font-medium">
+                          <button 
+                            onClick={() => openModal(product)} 
+                            className="text-gray-400 hover:text-red-600 mr-3 p-1 rounded transition-colors"
+                            title="Editar produto"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(product.id)} 
+                            className="text-gray-400 hover:text-red-700 p-1 rounded transition-colors"
+                            title="Excluir produto"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {isModalOpen && (

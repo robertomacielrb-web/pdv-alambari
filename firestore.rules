@@ -134,6 +134,35 @@ service cloud.firestore {
              (!('createdAt' in data) || data.createdAt is string);
     }
 
+    function isValidEventQuote(data) {
+      return data.keys().hasAll(['clientName', 'eventDate', 'totalGuests', 'totalMeatKg', 'total', 'status', 'createdAt']) &&
+             isValidString(data.clientName, 1, 150) &&
+             isValidDateString(data.eventDate) &&
+             data.totalGuests is number && data.totalGuests >= 0 &&
+             isValidNumber(data.totalMeatKg, 0) &&
+             isValidNumber(data.total, 0) &&
+             (data.status == 'pendente' || data.status == 'enviado' || data.status == 'aprovado' || data.status == 'realizado' || data.status == 'cancelado') &&
+             isValidDateString(data.createdAt) &&
+             (!('clientPhone' in data) || data.clientPhone is string) &&
+             (!('eventLocation' in data) || data.eventLocation is string) &&
+             (!('eventType' in data) || data.eventType is string) &&
+             (!('eventTime' in data) || data.eventTime is string) &&
+             (!('adultsMen' in data) || data.adultsMen is number) &&
+             (!('adultsWomen' in data) || data.adultsWomen is number) &&
+             (!('children' in data) || data.children is number) &&
+             (!('durationHours' in data) || data.durationHours is number) &&
+             (!('meats' in data) || data.meats is list) &&
+             (!('sides' in data) || data.sides is list) &&
+             (!('drinks' in data) || data.drinks is list) &&
+             (!('services' in data) || data.services is list) &&
+             (!('subtotal' in data) || data.subtotal is number) &&
+             (!('discount' in data) || data.discount is number) &&
+             (!('pricePerPerson' in data) || data.pricePerPerson is number) &&
+             (!('paymentTerms' in data) || data.paymentTerms is string) &&
+             (!('notes' in data) || data.notes is string) &&
+             (!('updatedAt' in data) || isValidDateString(data.updatedAt));
+    }
+
     // Rules
     match /products/{productId} {
       allow read: if true;
@@ -174,6 +203,13 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isValidCustomer(request.resource.data);
       allow update: if isValidCustomer(request.resource.data);
+      allow delete: if true;
+    }
+
+    match /event_quotes/{quoteId} {
+      allow read: if true;
+      allow create: if isValidEventQuote(request.resource.data);
+      allow update: if isValidEventQuote(request.resource.data);
       allow delete: if true;
     }
 

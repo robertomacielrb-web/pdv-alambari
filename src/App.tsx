@@ -15,8 +15,8 @@ import Configuracoes from './pages/Configuracoes';
 import Cardapio from './pages/Cardapio';
 import ContasPagar from './pages/ContasPagar';
 import FluxoCaixa from './pages/FluxoCaixa';
-
 import ERP from './pages/ERP';
+import Churrasco from './pages/Churrasco';
 
 function AppRoutes() {
   return (
@@ -28,14 +28,16 @@ function AppRoutes() {
         <Route path="mesas" element={<Mesas />} />
         <Route path="fiados" element={<Fiados />} />
         <Route path="delivery" element={<Delivery />} />
+        <Route path="churrasco" element={<Churrasco />} />
+        <Route path="eventos" element={<Navigate to="/churrasco" replace />} />
+        <Route path="erp" element={<ERP />} />
         <Route path="producao" element={<Producao />} />
         <Route path="produtos" element={<Produtos />} />
         <Route path="historico" element={<Historico />} />
         <Route path="relatorios" element={<Relatorios />} />
-        <Route path="configuracoes" element={<Configuracoes />} />
         <Route path="contas-pagar" element={<ContasPagar />} />
         <Route path="fluxo-caixa" element={<FluxoCaixa />} />
-        <Route path="erp" element={<ERP />} />
+        <Route path="configuracoes" element={<Configuracoes />} />
       </Route>
     </Routes>
   );

@@ -99,6 +99,18 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["clientName", "eventDate", "totalGuests", "totalMeatKg", "total", "status", "createdAt"]
+    },
+    "StoreSettings": {
+      "title": "StoreSettings",
+      "description": "Store configuration, branding and preferences",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string", "description": "Establishment brand name" },
+        "logoUrl": { "type": "string", "description": "Custom logo URL or base64 data URI" },
+        "whatsappNumber": { "type": "string", "description": "WhatsApp contact number" },
+        "pixKey": { "type": "string", "description": "PIX payment key" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "firestore": {
@@ -125,6 +137,10 @@
     "/event_quotes/{quoteId}": {
       "schema": { "$ref": "#/entities/EventQuote" },
       "description": "Barbecue event quotes and proposals"
+    },
+    "/settings/{docId}": {
+      "schema": { "$ref": "#/entities/StoreSettings" },
+      "description": "Store settings, branding and configurations"
     }
   }
 }

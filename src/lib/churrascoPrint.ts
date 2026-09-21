@@ -4,9 +4,10 @@ import { executePrint } from './printHelper';
 
 export function printChurrascoProposal(
   quote: EventQuote,
-  storeSettings?: { storeName?: string; whatsappNumber?: string; pixKey?: string }
+  storeSettings?: { storeName?: string; whatsappNumber?: string; pixKey?: string; logoUrl?: string }
 ) {
   const storeName = storeSettings?.storeName || 'PDV ALAMBARI DEFUMADOS';
+  const logoUrl = storeSettings?.logoUrl || '/logo.png';
   const selectedMeats = quote.meats.filter(m => m.selected && m.kg > 0);
   const selectedSides = quote.sides.filter(s => s.selected);
   const selectedDrinks = quote.drinks.filter(d => d.selected);
@@ -176,9 +177,12 @@ export function printChurrascoProposal(
     </head>
     <body>
       <div class="header">
-        <div>
-          <h1>${storeName}</h1>
-          <div class="subtitle">Especialistas em Churrasco, Defumados e Cortes Nobres</div>
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <img src="${logoUrl}" alt="Logo" style="width: 54px; height: 54px; border-radius: 50%; object-fit: cover; border: 2px solid #b91c1c; flex-shrink: 0;" />
+          <div>
+            <h1>${storeName}</h1>
+            <div class="subtitle">Especialistas em Churrasco, Defumados e Cortes Nobres</div>
+          </div>
         </div>
         <div>
           <span class="badge">Orçamento de Evento</span>

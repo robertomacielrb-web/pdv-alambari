@@ -24,6 +24,7 @@ import {
   Truck,
   MessageCircle,
   Wallet,
+  Bell,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
@@ -68,6 +69,8 @@ export default function Delivery() {
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [step, setStep] = useState<1 | 2>(1);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [pendingOnlineOrders, setPendingOnlineOrders] = useState<any[]>([]);
+  const [activePendingOrderId, setActivePendingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     // Get open cashier session
@@ -81,6 +84,20 @@ export default function Delivery() {
       } else {
         setCurrentSession(null);
       }
+    });
+
+    // Listen for open/pending delivery orders (e.g. from online menu)
+    const qPending = query(
+      collection(db, "orders"),
+      where("type", "==", "delivery"),
+      where("status", "==", "open")
+    );
+    const unsubPending = onSnapshot(qPending, (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      setPendingOnlineOrders(list);
     });
 
     // Get products
@@ -103,6 +120,7 @@ export default function Delivery() {
 
     return () => {
       unsubSession();
+      unsubPending();
       unsubProducts();
     };
   }, []);
@@ -343,6 +361,30 @@ export default function Delivery() {
     executePrint(order, content);
   };
 
+  const handleLoadPendingOrder = (order: any) => {
+    setActivePendingOrderId(order.id);
+    setCustomerName(order.customerName || "");
+    setAddress(order.deliveryAddress || "");
+    setPhoneNumber(order.deliveryPhone || "");
+    setObservations(order.observations || "");
+    if (order.deliveryFee) setDeliveryFee(order.deliveryFee);
+    if (order.paymentMethod && ["dinheiro", "cartao", "pix"].includes(order.paymentMethod)) {
+      setPaymentMethod(order.paymentMethod);
+    }
+    if (Array.isArray(order.items)) {
+      setCart(
+        order.items.map((it: any) => ({
+          id: it.productId || it.id || Math.random().toString(),
+          name: it.name,
+          price: it.price,
+          category: it.category || "Geral",
+          quantity: it.quantity || 1,
+          observation: it.observation || "",
+        }))
+      );
+    }
+  };
+
   const handleCheckout = async () => {
     if (!currentSession) {
       alert("Abra o caixa primeiro!");
@@ -404,7 +446,11 @@ export default function Delivery() {
         cashierId: currentSession.id || "unknown",
       };
 
-      await addDoc(collection(db, "orders"), orderData);
+      if (activePendingOrderId) {
+        await updateDoc(doc(db, "orders", activePendingOrderId), orderData);
+      } else {
+        await addDoc(collection(db, "orders"), orderData);
+      }
 
       // Update cashier session total
       await updateDoc(doc(db, "cashierSessions", currentSession.id), {
@@ -415,6 +461,7 @@ export default function Delivery() {
       setLastOrder(orderData);
       setLastPassword(password);
       setCart([]);
+      setActivePendingOrderId(null);
       setCustomerName("");
       setAddress("");
       setPhoneNumber("");
@@ -476,6 +523,39 @@ export default function Delivery() {
               </span>
             )}
           </div>
+
+          {/* Pending Incoming Orders Alert Banner */}
+          {pendingOnlineOrders.length > 0 && (
+            <div className="bg-amber-50 border-b border-amber-200 p-3 px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2 text-amber-900 text-xs sm:text-sm font-bold">
+                <Bell className="w-4 h-4 text-amber-600 animate-bounce shrink-0" />
+                <span>
+                  {pendingOnlineOrders.length} pedido(s) delivery recebido(s) aguardando atendimento:
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {pendingOnlineOrders.map((ord) => (
+                  <button
+                    key={ord.id}
+                    onClick={() => handleLoadPendingOrder(ord)}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-sm ${
+                      activePendingOrderId === ord.id
+                        ? 'bg-amber-700 text-white ring-2 ring-amber-400'
+                        : 'bg-white hover:bg-amber-100 text-amber-900 border border-amber-300'
+                    }`}
+                  >
+                    <span>{ord.customerName || 'Cliente Online'}</span>
+                    <span className="font-extrabold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded text-[11px]">
+                      R$ {Number(ord.total || 0).toFixed(2).replace('.', ',')}
+                    </span>
+                    <span className="text-[10px] uppercase tracking-wider bg-amber-600 text-white px-1.5 py-0.2 rounded font-black">
+                      {activePendingOrderId === ord.id ? 'Carregado' : 'Abrir'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="bg-white border-b overflow-x-auto scrollbar-thin flex p-3 gap-2 whitespace-nowrap shrink-0">
             {categories.map((cat, idx) => (

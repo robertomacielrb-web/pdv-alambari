@@ -1,6 +1,9 @@
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { NotificationProvider } from './contexts/NotificationContext';
+import { CashierAuthProvider } from './contexts/CashierAuthContext';
+import { StoreSettingsProvider } from './contexts/StoreSettingsContext';
 import Layout from './components/Layout';
 import Caixa from './pages/Caixa';
 import Balcao from './pages/Balcao';
@@ -46,9 +49,15 @@ function AppRoutes() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <HashRouter>
-        <AppRoutes />
-      </HashRouter>
+      <StoreSettingsProvider>
+        <NotificationProvider>
+          <CashierAuthProvider>
+            <HashRouter>
+              <AppRoutes />
+            </HashRouter>
+          </CashierAuthProvider>
+        </NotificationProvider>
+      </StoreSettingsProvider>
     </ErrorBoundary>
   );
 }

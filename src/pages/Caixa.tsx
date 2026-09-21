@@ -12,6 +12,9 @@ import {
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "../firebase";
 import { executePrint } from "../lib/printHelper";
+import { useCashierAuth } from "../contexts/CashierAuthContext";
+import { useStoreSettings } from "../contexts/StoreSettingsContext";
+import CashierLoginGate from "../components/CashierLoginGate";
 import {
   Lock,
   Unlock,
@@ -48,6 +51,8 @@ interface Order {
 }
 
 export default function Caixa() {
+  const { isAuthenticated, logout, config, loading: authLoading } = useCashierAuth();
+  const { logoUrl, storeName } = useStoreSettings();
   const [currentSession, setCurrentSession] = useState<CashierSession | null>(
     null,
   );
@@ -293,33 +298,57 @@ export default function Caixa() {
     return matchesSearch && matchesCategory;
   });
 
-  if (loading)
+  if (authLoading || loading)
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[50vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
       </div>
     );
+
+  if (!isAuthenticated) {
+    return <CashierLoginGate />;
+  }
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col gap-6 relative">
       {/* Header com Resumo de Vendas */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="bg-gradient-to-r from-red-600 to-red-800 p-6 text-white flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-black tracking-tight mb-1">
-              Painel do Caixa
-            </h1>
-            <p className="font-medium text-red-100 flex items-center">
-              <Clock className="w-4 h-4 mr-2" />
-              {new Date().toLocaleDateString("pt-BR", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </p>
+        <div className="bg-gradient-to-r from-red-600 to-red-800 p-6 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <img
+              src={logoUrl || "/logo.png"}
+              alt={storeName || "Alambari Defumados"}
+              className="h-14 w-14 rounded-full object-cover border-2 border-white/40 shadow-md shrink-0 bg-black/40"
+              referrerPolicy="no-referrer"
+            />
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-3xl font-black tracking-tight mb-0.5">
+                  Painel do Caixa
+                </h1>
+                {config.requireAuth && (
+                  <button
+                    onClick={logout}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-black/30 hover:bg-black/50 text-red-200 hover:text-white border border-white/20 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+                    title="Bloquear a aba do Caixa com senha"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-red-300" />
+                    <span>Bloquear</span>
+                  </button>
+                )}
+              </div>
+              <p className="font-medium text-red-100 flex items-center text-sm">
+                <Clock className="w-4 h-4 mr-2" />
+                {new Date().toLocaleDateString("pt-BR", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
+            </div>
           </div>
-          <div className="bg-white/20 px-6 py-4 rounded-xl shadow-inner backdrop-blur-sm border border-white/30 text-right">
+          <div className="bg-white/20 px-6 py-4 rounded-xl shadow-inner backdrop-blur-sm border border-white/30 text-right w-full sm:w-auto">
             <p className="text-red-100 font-bold uppercase tracking-wider text-xs mb-1">
               Vendas de Hoje (Geral)
             </p>

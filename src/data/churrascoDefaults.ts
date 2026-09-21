@@ -211,3 +211,5 @@ export function formatWhatsAppSummary(
   return msg;
 }
 
+export * from '../lib/churrascoCalculator';
+

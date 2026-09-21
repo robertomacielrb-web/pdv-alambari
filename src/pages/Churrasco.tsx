@@ -19,8 +19,6 @@ import {
   Save, 
   Printer, 
   ClipboardList, 
-  CheckCircle2, 
-  Clock, 
   Calendar, 
   MapPin, 
   DollarSign, 
@@ -40,7 +38,15 @@ import {
   TrendingUp,
   AlertCircle,
   SlidersHorizontal,
-  FileDown
+  FileDown,
+  CheckCircle2,
+  XCircle,
+  Send,
+  Scale,
+  MessageSquare,
+  Clock,
+  ArrowRight,
+  History
 } from 'lucide-react';
 import { 
   MeatItem, 
@@ -57,17 +63,26 @@ import {
   calculateRecommendedMeatKg, 
   distributeMeatsProportionally, 
   formatCurrency, 
-  formatWhatsAppProposal 
+  formatWhatsAppProposal,
+  formatWhatsAppSummary,
+  calculateGramsPerPerson,
+  calculateTotalMeatWeight,
+  calculateMeatPerPersonDetails,
+  getAppetiteCategory,
+  adjustMeatDistribution
 } from '../data/churrascoDefaults';
 import { printChurrascoProposal, printChurrasqueiroList } from '../lib/churrascoPrint';
 import { exportChurrascoProposalPDF } from '../lib/churrascoPdf';
+import { useStoreSettings } from '../contexts/StoreSettingsContext';
 
 export default function Churrasco() {
+  const { logoUrl: globalLogoUrl, storeName: globalStoreName } = useStoreSettings();
   const [activeTab, setActiveTab] = useState<'calculadora' | 'orcamentos'>('calculadora');
   
   // Store settings for proposals
-  const [storeSettings, setStoreSettings] = useState<{ whatsappNumber?: string; storeName?: string; pixKey?: string }>({
-    storeName: 'PDV ALAMBARI DEFUMADOS'
+  const [storeSettings, setStoreSettings] = useState<{ whatsappNumber?: string; storeName?: string; pixKey?: string; logoUrl?: string }>({
+    storeName: 'PDV ALAMBARI DEFUMADOS',
+    logoUrl: '/logo.png'
   });
 
   // Saved quotes list
@@ -91,6 +106,11 @@ export default function Churrasco() {
   // Guests & Grams (Unificado como pessoas)
   const [totalGuests, setTotalGuests] = useState(30);
   const [gramsPerPerson, setGramsPerPerson] = useState(400);
+
+  // Modo de Cálculo Dinâmico: 'por_consumo' (g/pessoa) ou 'por_peso_total' (kg)
+  const [calcInputMode, setCalcInputMode] = useState<'por_consumo' | 'por_peso_total'>('por_consumo');
+  const [customTotalWeightKg, setCustomTotalWeightKg] = useState<number>(12);
+  const [autoDistributeOnChange, setAutoDistributeOnChange] = useState<boolean>(true);
 
   // Preset mode
   const [presetMode, setPresetMode] = useState<'padrao' | 'leve' | 'festa'>('padrao');
@@ -145,7 +165,8 @@ export default function Churrasco() {
           setStoreSettings({
             storeName: data.storeName || 'PDV ALAMBARI DEFUMADOS',
             whatsappNumber: data.whatsappNumber || '',
-            pixKey: data.pixKey || ''
+            pixKey: data.pixKey || '',
+            logoUrl: data.logoUrl || globalLogoUrl || '/logo.png'
           });
         }
       } catch (err) {
@@ -192,12 +213,21 @@ export default function Churrasco() {
 
   // Recommended Total Meat Kg
   const recommendedMeatKg = useMemo(() => {
-    return calculateRecommendedMeatKg(
+    if (calcInputMode === 'por_peso_total' && customTotalWeightKg > 0) {
+      return Number(customTotalWeightKg.toFixed(2));
+    }
+    return calculateTotalMeatWeight(
       Number(totalGuests) || 0,
       Number(gramsPerPerson) || 400,
       durationHours
     );
-  }, [totalGuests, gramsPerPerson, durationHours]);
+  }, [totalGuests, gramsPerPerson, durationHours, calcInputMode, customTotalWeightKg]);
+
+  // Detalhes calculados em tempo real (gramas por pessoa, kg/pessoa, categoria de apetite)
+  const meatCalcDetails = useMemo(() => {
+    const targetWeight = calcInputMode === 'por_peso_total' ? customTotalWeightKg : recommendedMeatKg;
+    return calculateMeatPerPersonDetails(targetWeight, Number(totalGuests) || 0, durationHours);
+  }, [calcInputMode, customTotalWeightKg, recommendedMeatKg, totalGuests, durationHours]);
 
   // Estimated Charcoal & Ice
   const recommendedCharcoalKg = useMemo(() => {
@@ -331,9 +361,58 @@ export default function Churrasco() {
     }
   };
 
-  // Auto-distribute meats when user clicks button or when recommended meat changes and user wants auto-distribution
+  // Handlers para ajuste dinâmico de convidados, peso total e gramas/pessoa
+  const handleUpdateGuests = (newGuests: number) => {
+    const validGuests = Math.max(1, newGuests);
+    setTotalGuests(validGuests);
+    if (calcInputMode === 'por_peso_total') {
+      const calculatedGrams = calculateGramsPerPerson(customTotalWeightKg, validGuests);
+      setGramsPerPerson(calculatedGrams);
+      if (autoDistributeOnChange) {
+        setMeats(prev => adjustMeatDistribution(prev, customTotalWeightKg));
+      }
+    } else {
+      const newWeight = calculateTotalMeatWeight(validGuests, gramsPerPerson, durationHours);
+      setCustomTotalWeightKg(newWeight);
+      if (autoDistributeOnChange) {
+        setMeats(prev => adjustMeatDistribution(prev, newWeight));
+      }
+    }
+  };
+
+  const handleUpdateTotalWeight = (newWeightKg: number) => {
+    const validWeight = Math.max(0, Number(newWeightKg.toFixed(2)));
+    setCustomTotalWeightKg(validWeight);
+    if (totalGuests > 0) {
+      const calculatedGrams = calculateGramsPerPerson(validWeight, totalGuests);
+      setGramsPerPerson(calculatedGrams);
+    }
+    if (autoDistributeOnChange) {
+      setMeats(prev => adjustMeatDistribution(prev, validWeight));
+    }
+  };
+
+  const handleUpdateGramsPerPerson = (newGrams: number) => {
+    const validGrams = Math.max(50, newGrams);
+    setGramsPerPerson(validGrams);
+    const newWeight = calculateTotalMeatWeight(totalGuests, validGrams, durationHours);
+    setCustomTotalWeightKg(newWeight);
+    if (autoDistributeOnChange) {
+      setMeats(prev => adjustMeatDistribution(prev, newWeight));
+    }
+  };
+
+  const handleApplyWeightToMeats = (weightToApply?: number) => {
+    const targetKg = weightToApply ?? (calcInputMode === 'por_peso_total' ? customTotalWeightKg : recommendedMeatKg);
+    setMeats(prev => adjustMeatDistribution(prev, targetKg));
+    setSuccessMessage(`${targetKg.toFixed(1)} kg distribuídos proporcionalmente entre os cortes selecionados!`);
+    setTimeout(() => setSuccessMessage(null), 3500);
+  };
+
+  // Auto-distribute meats when user clicks button
   const handleDistributeMeats = () => {
-    setMeats(prevMeats => distributeMeatsProportionally(prevMeats, recommendedMeatKg));
+    const targetKg = calcInputMode === 'por_peso_total' ? customTotalWeightKg : recommendedMeatKg;
+    setMeats(prevMeats => adjustMeatDistribution(prevMeats, targetKg));
   };
 
   // Run initial distribution once if all meats are 0
@@ -670,6 +749,9 @@ export default function Churrasco() {
     const loadedTotal = quote.totalGuests || ((quote.adultsMen || 0) + (quote.adultsWomen || 0) + (quote.children || 0)) || 30;
     setTotalGuests(loadedTotal);
     setGramsPerPerson(quote.gramsPerPerson || quote.gramsPerMan || 400);
+    if (quote.totalMeatKg && quote.totalMeatKg > 0) {
+      setCustomTotalWeightKg(quote.totalMeatKg);
+    }
     setProfit(quote.profit || 0);
     if (quote.pricePerPerson) {
       setTargetPricePerPerson(quote.pricePerPerson);
@@ -747,24 +829,32 @@ export default function Churrasco() {
     }
   };
 
-  // Update status directly from list
+  // Update status directly from list or quick buttons (aceito, recusado, etc.)
   const handleUpdateStatus = async (id: string, newStatus: EventQuote['status']) => {
     try {
       await updateDoc(doc(db, 'event_quotes', id), {
         status: newStatus,
         updatedAt: new Date().toISOString()
       });
+      if (editingQuoteId === id) {
+        setStatus(newStatus);
+      }
+      const label = newStatus === 'aceito' ? 'Aceito' : newStatus === 'recusado' ? 'Recusado' : newStatus;
+      setSuccessMessage(`Status do orçamento atualizado para "${label}"!`);
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `event_quotes/${id}`);
     }
   };
 
-  // WhatsApp Sender
-  const handleSendWhatsApp = () => {
-    const quote = buildCurrentQuote();
+  // WhatsApp Sender (Proposta Completa)
+  const handleSendWhatsApp = (targetQuote?: EventQuote | unknown) => {
+    const isQuoteObject = targetQuote && typeof targetQuote === 'object' && 'clientName' in (targetQuote as Record<string, unknown>);
+    const quote = (isQuoteObject ? targetQuote : null) as EventQuote || buildCurrentQuote();
     const msg = formatWhatsAppProposal(quote, storeSettings);
     const encoded = encodeURIComponent(msg);
-    let cleanPhone = clientPhone.replace(/\D/g, '');
+    const phone = (isQuoteObject ? (targetQuote as EventQuote).clientPhone : clientPhone) || '';
+    let cleanPhone = phone.replace(/\D/g, '');
     if (cleanPhone.length > 0 && !cleanPhone.startsWith('55')) {
       cleanPhone = '55' + cleanPhone;
     }
@@ -772,6 +862,35 @@ export default function Churrasco() {
       ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`
       : `https://api.whatsapp.com/send?text=${encoded}`;
     window.open(url, '_blank');
+
+    if (!isQuoteObject && editingQuoteId && status === 'pendente') {
+      handleUpdateStatus(editingQuoteId, 'enviado');
+    } else if (isQuoteObject && (targetQuote as EventQuote).id && (targetQuote as EventQuote).status === 'pendente') {
+      handleUpdateStatus((targetQuote as EventQuote).id!, 'enviado');
+    }
+  };
+
+  // WhatsApp Sender (Resumo Executivo Rápido)
+  const handleSendWhatsAppSummary = (targetQuote?: EventQuote | unknown) => {
+    const isQuoteObject = targetQuote && typeof targetQuote === 'object' && 'clientName' in (targetQuote as Record<string, unknown>);
+    const quote = (isQuoteObject ? targetQuote : null) as EventQuote || buildCurrentQuote();
+    const msg = formatWhatsAppSummary(quote, storeSettings);
+    const encoded = encodeURIComponent(msg);
+    const phone = (isQuoteObject ? (targetQuote as EventQuote).clientPhone : clientPhone) || '';
+    let cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length > 0 && !cleanPhone.startsWith('55')) {
+      cleanPhone = '55' + cleanPhone;
+    }
+    const url = cleanPhone
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`
+      : `https://api.whatsapp.com/send?text=${encoded}`;
+    window.open(url, '_blank');
+
+    if (!isQuoteObject && editingQuoteId && status === 'pendente') {
+      handleUpdateStatus(editingQuoteId, 'enviado');
+    } else if (isQuoteObject && (targetQuote as EventQuote).id && (targetQuote as EventQuote).status === 'pendente') {
+      handleUpdateStatus((targetQuote as EventQuote).id!, 'enviado');
+    }
   };
 
   // Copy proposal text
@@ -838,13 +957,21 @@ export default function Churrasco() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-200 pb-4">
         <div>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-red-600 text-white rounded-xl shadow-md">
-              <Flame className="w-7 h-7" />
-            </div>
+            <img
+              src={globalLogoUrl || "/logo.png"}
+              alt={globalStoreName || "Alambari Defumados"}
+              className="w-12 h-12 rounded-full object-cover border-2 border-red-600 shadow-md shrink-0"
+              referrerPolicy="no-referrer"
+            />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-                Eventos & Orçamento de Churrasco
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+                  Eventos & Orçamento de Churrasco
+                </h1>
+                <span className="text-[11px] font-black uppercase tracking-wider bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                  {globalStoreName || "Alambari Defumados"}
+                </span>
+              </div>
               <p className="text-sm text-gray-500">
                 Calculadora inteligente de carnes por pessoa, montagem de cardápio e envio de propostas
               </p>
@@ -954,6 +1081,155 @@ export default function Churrasco() {
               </div>
             </div>
           </div>
+
+          {/* PAINEL: Últimos Orçamentos */}
+          {quotes.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-red-50 text-red-600 rounded-lg">
+                    <History className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                      Últimos Orçamentos
+                      <span className="text-xs bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full">
+                        {quotes.length} total
+                      </span>
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      Recupere cálculos anteriores para editar, reenviar resumo pelo WhatsApp ou marcar status.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('orcamentos')}
+                  className="text-xs text-red-600 hover:text-red-700 font-bold flex items-center gap-1 self-start sm:self-auto transition-colors"
+                >
+                  <span>Ver todos os {quotes.length} orçamentos</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {quotes.slice(0, 4).map(q => {
+                  const isCurrent = editingQuoteId === q.id;
+                  const isAceito = q.status === 'aceito' || q.status === 'aprovado';
+                  const isRecusado = q.status === 'recusado';
+                  const isEnviado = q.status === 'enviado';
+                  const badgeStyle = isAceito
+                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    : isRecusado
+                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                    : isEnviado
+                    ? 'bg-blue-100 text-blue-800 border-blue-200'
+                    : 'bg-amber-100 text-amber-800 border-amber-200';
+
+                  return (
+                    <div
+                      key={q.id}
+                      className={`p-3 rounded-xl border transition-all flex flex-col justify-between space-y-2.5 ${
+                        isCurrent
+                          ? 'bg-red-50/50 border-red-300 ring-2 ring-red-500/20 shadow-xs'
+                          : 'bg-slate-50/60 hover:bg-slate-50 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-start justify-between gap-1.5">
+                          <span className="font-bold text-xs text-gray-900 truncate max-w-[130px]" title={q.clientName}>
+                            {q.clientName || 'Cliente sem nome'}
+                          </span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border uppercase shrink-0 ${badgeStyle}`}>
+                            {q.status}
+                          </span>
+                        </div>
+
+                        <div className="text-[11px] text-gray-500 flex items-center gap-1.5">
+                          <Clock className="w-3 h-3 text-gray-400 shrink-0" />
+                          <span className="truncate">
+                            {q.eventDate ? new Date(q.eventDate + 'T12:00:00').toLocaleDateString('pt-BR') : 'Sem data'}
+                          </span>
+                          <span>•</span>
+                          <span className="shrink-0">{q.totalGuests} pess.</span>
+                        </div>
+
+                        <div className="flex items-baseline justify-between pt-1">
+                          <div>
+                            <span className="text-[10px] text-gray-400 block font-medium">Total</span>
+                            <span className="font-black text-sm text-gray-900">{formatCurrency(q.total)}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-gray-400 block">Carnes</span>
+                            <span className="text-xs font-bold text-red-600">
+                              {q.totalMeatKg ? `${Number(q.totalMeatKg).toFixed(1)} kg` : '-'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Ações Rápidas */}
+                      <div className="pt-2 border-t border-gray-200/80 flex items-center justify-between gap-1 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => handleLoadQuote(q)}
+                          className={`px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors ${
+                            isCurrent
+                              ? 'bg-red-600 text-white shadow-2xs'
+                              : 'bg-white border border-gray-300 text-gray-700 hover:bg-red-50 hover:text-red-700 hover:border-red-200'
+                          }`}
+                          title="Recuperar e editar este orçamento na calculadora"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>{isCurrent ? 'Editando' : 'Editar'}</span>
+                        </button>
+
+                        <div className="flex items-center gap-1">
+                          {/* Botão Aceito */}
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateStatus(q.id!, 'aceito')}
+                            className={`p-1 rounded-md text-[10px] font-bold flex items-center transition-colors ${
+                              isAceito
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                            }`}
+                            title="Marcar como Aceito"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Botão Recusado */}
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateStatus(q.id!, 'recusado')}
+                            className={`p-1 rounded-md text-[10px] font-bold flex items-center transition-colors ${
+                              isRecusado
+                                ? 'bg-rose-600 text-white'
+                                : 'bg-white border border-rose-300 text-rose-700 hover:bg-rose-50'
+                            }`}
+                            title="Marcar como Recusado"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Botão WhatsApp Resumo */}
+                          <button
+                            type="button"
+                            onClick={() => handleSendWhatsAppSummary(q)}
+                            className="p-1 rounded-md bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-colors"
+                            title="Enviar Resumo Executivo pelo WhatsApp"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Left Column: Form & Calculator (8 cols) */}
@@ -1082,49 +1358,49 @@ export default function Churrasco() {
                 </div>
               </div>
 
-              {/* SECTION 2: Calculadora de Convidados (Pessoas) & Consumo de Carne */}
+              {/* SECTION 2: Quantidade de Convidados & Cálculo de Carne */}
               <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
-                  <div className="flex items-center gap-2 text-gray-900 font-bold">
-                    <Users className="w-5 h-5 text-red-600" />
-                    <span>2. Quantidade de Convidados (Pessoas) & Consumo de Carne</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-gray-900 font-bold text-base">
+                      <Users className="w-5 h-5 text-red-600" />
+                      <span>2. Cálculo Dinâmico de Carnes & Convidados</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Ajuste dinamicamente pelo consumo por pessoa ou pelo peso total de carne desejado.
+                    </p>
                   </div>
 
-                  {/* Presets de consumo */}
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-gray-500 font-medium">Consumo:</span>
+                  {/* Mode Selector Tabs */}
+                  <div className="flex items-center bg-gray-100 p-1 rounded-xl border border-gray-200 self-start sm:self-auto text-xs">
                     <button
                       type="button"
-                      onClick={() => applyPreset('leve')}
-                      className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
-                        presetMode === 'leve'
-                          ? 'bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      onClick={() => setCalcInputMode('por_consumo')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all ${
+                        calcInputMode === 'por_consumo'
+                          ? 'bg-white text-gray-900 shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
                       }`}
                     >
-                      Leve (350g)
+                      <Flame className="w-3.5 h-3.5 text-red-600" />
+                      <span>Por Consumo (g/pessoa)</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => applyPreset('padrao')}
-                      className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
-                        presetMode === 'padrao'
-                          ? 'bg-red-100 text-red-800 border border-red-300 shadow-2xs'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      onClick={() => {
+                        setCalcInputMode('por_peso_total');
+                        if (customTotalWeightKg <= 0 && recommendedMeatKg > 0) {
+                          setCustomTotalWeightKg(recommendedMeatKg);
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all ${
+                        calcInputMode === 'por_peso_total'
+                          ? 'bg-white text-gray-900 shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
                       }`}
                     >
-                      Tradicional (400g)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyPreset('festa')}
-                      className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
-                        presetMode === 'festa'
-                          ? 'bg-purple-100 text-purple-800 border border-purple-300 shadow-2xs'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      Generoso (500g)
+                      <Scale className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Por Peso Total (kg)</span>
                     </button>
                   </div>
                 </div>
@@ -1135,27 +1411,27 @@ export default function Churrasco() {
                     <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-700">
                       <span className="flex items-center gap-1.5">
                         <Users className="w-4 h-4 text-red-600" />
-                        Total de Pessoas
+                        Total de Convidados
                       </span>
                       <span className="text-red-700 bg-red-100 px-2 py-0.5 rounded-full font-bold">
                         {totalGuests} {totalGuests === 1 ? 'pessoa' : 'pessoas'}
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-center gap-3 py-1">
+                    <div className="flex items-center justify-center gap-2 sm:gap-3 py-1">
                       <button
                         type="button"
-                        onClick={() => setTotalGuests(Math.max(1, totalGuests - 5))}
-                        className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-500 font-bold hover:bg-gray-100 text-xs transition-colors"
-                        title="Diminuir 5 pessoas"
+                        onClick={() => handleUpdateGuests(totalGuests - 5)}
+                        className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-600 font-bold hover:bg-gray-100 text-xs transition-colors"
+                        title="Diminuir 5 convidados"
                       >
                         -5
                       </button>
                       <button
                         type="button"
-                        onClick={() => setTotalGuests(Math.max(1, totalGuests - 1))}
-                        className="w-10 h-10 rounded-lg bg-white border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 flex items-center justify-center text-xl shadow-2xs transition-colors"
-                        title="Diminuir 1 pessoa"
+                        onClick={() => handleUpdateGuests(totalGuests - 1)}
+                        className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-white border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 flex items-center justify-center text-xl shadow-2xs transition-colors"
+                        title="Diminuir 1 convidado"
                       >
                         -
                       </button>
@@ -1165,38 +1441,38 @@ export default function Churrasco() {
                           min="1"
                           max="2000"
                           value={totalGuests || ''}
-                          onChange={e => setTotalGuests(Math.max(0, parseInt(e.target.value) || 0))}
-                          className="w-24 text-center text-3xl font-black text-gray-900 bg-white border border-slate-300 rounded-lg py-1 shadow-inner outline-none focus:ring-2 focus:ring-red-500"
+                          onChange={e => handleUpdateGuests(parseInt(e.target.value) || 1)}
+                          className="w-20 sm:w-24 text-center text-2xl sm:text-3xl font-black text-gray-900 bg-white border border-slate-300 rounded-lg py-1 shadow-inner outline-none focus:ring-2 focus:ring-red-500"
                         />
-                        <span className="block text-[10px] text-gray-400 text-center mt-0.5">digite ou ajuste</span>
+                        <span className="block text-[10px] text-gray-400 text-center mt-0.5">digite convidados</span>
                       </div>
                       <button
                         type="button"
-                        onClick={() => setTotalGuests(totalGuests + 1)}
-                        className="w-10 h-10 rounded-lg bg-white border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 flex items-center justify-center text-xl shadow-2xs transition-colors"
-                        title="Adicionar 1 pessoa"
+                        onClick={() => handleUpdateGuests(totalGuests + 1)}
+                        className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-white border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 flex items-center justify-center text-xl shadow-2xs transition-colors"
+                        title="Adicionar 1 convidado"
                       >
                         +
                       </button>
                       <button
                         type="button"
-                        onClick={() => setTotalGuests(totalGuests + 5)}
-                        className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-500 font-bold hover:bg-gray-100 text-xs transition-colors"
-                        title="Adicionar 5 pessoas"
+                        onClick={() => handleUpdateGuests(totalGuests + 5)}
+                        className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-600 font-bold hover:bg-gray-100 text-xs transition-colors"
+                        title="Adicionar 5 convidados"
                       >
                         +5
                       </button>
                     </div>
 
-                    {/* Atalhos rápidos de pessoas */}
+                    {/* Atalhos rápidos de convidados */}
                     <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-1 flex-wrap text-xs">
-                      <span className="text-[11px] text-slate-500 font-medium">Atalhos rápidos:</span>
+                      <span className="text-[11px] text-slate-500 font-medium">Atalhos:</span>
                       <div className="flex items-center gap-1 flex-wrap">
-                        {[10, 15, 20, 30, 40, 50, 80, 100].map(n => (
+                        {[10, 15, 20, 25, 30, 40, 50, 80, 100].map(n => (
                           <button
                             key={n}
                             type="button"
-                            onClick={() => setTotalGuests(n)}
+                            onClick={() => handleUpdateGuests(n)}
                             className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
                               totalGuests === n
                                 ? 'bg-red-600 text-white shadow-xs'
@@ -1210,106 +1486,251 @@ export default function Churrasco() {
                     </div>
                   </div>
 
-                  {/* Bloco 2: Gramas por Pessoa & Cálculo de Carne */}
+                  {/* Bloco 2: Controle Dinâmico (Por Consumo ou Por Peso Total) */}
                   <div className="md:col-span-6 bg-slate-50/80 p-4 rounded-xl border border-slate-200 flex flex-col justify-between space-y-3">
-                    <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-700">
-                      <span className="flex items-center gap-1.5">
-                        <Flame className="w-4 h-4 text-red-600" />
-                        Consumo Médio por Pessoa
-                      </span>
-                      <span className="text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">
-                        {gramsPerPerson}g / pessoa
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-center gap-3 py-1">
-                      <button
-                        type="button"
-                        onClick={() => setGramsPerPerson(Math.max(100, gramsPerPerson - 50))}
-                        className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-500 font-bold hover:bg-gray-100 text-xs transition-colors"
-                        title="Diminuir 50g"
-                      >
-                        -50
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGramsPerPerson(Math.max(100, gramsPerPerson - 25))}
-                        className="w-10 h-10 rounded-lg bg-white border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 flex items-center justify-center text-xl shadow-2xs transition-colors"
-                        title="Diminuir 25g"
-                      >
-                        -
-                      </button>
-                      <div className="relative">
-                        <div className="flex items-center bg-white border border-slate-300 rounded-lg px-2 py-1 shadow-inner focus-within:ring-2 focus-within:ring-red-500">
-                          <input
-                            type="number"
-                            min="50"
-                            max="2000"
-                            step="25"
-                            value={gramsPerPerson || ''}
-                            onChange={e => setGramsPerPerson(Math.max(0, parseInt(e.target.value) || 0))}
-                            className="w-16 text-center text-2xl font-black text-gray-900 bg-transparent outline-none"
-                          />
-                          <span className="text-xs font-bold text-gray-400 ml-1">g</span>
-                        </div>
-                        <span className="block text-[10px] text-gray-400 text-center mt-0.5">gramas por pessoa</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setGramsPerPerson(gramsPerPerson + 25)}
-                        className="w-10 h-10 rounded-lg bg-white border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 flex items-center justify-center text-xl shadow-2xs transition-colors"
-                        title="Adicionar 25g"
-                      >
-                        +
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setGramsPerPerson(gramsPerPerson + 50)}
-                        className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-500 font-bold hover:bg-gray-100 text-xs transition-colors"
-                        title="Adicionar 50g"
-                      >
-                        +50
-                      </button>
-                    </div>
-
-                    {/* Resumo da conta de carne */}
-                    <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        {totalGuests} pessoas × {gramsPerPerson}g = <strong className="text-slate-800">{((totalGuests * gramsPerPerson) / 1000).toFixed(2)} kg</strong>
-                        {durationHours > 4 && (
-                          <span className="text-amber-700 block text-[10px]">
-                            (+{((durationHours - 4) * 5)}% por {durationHours}h de evento)
+                    {calcInputMode === 'por_consumo' ? (
+                      <>
+                        <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-700">
+                          <span className="flex items-center gap-1.5">
+                            <Flame className="w-4 h-4 text-red-600" />
+                            Consumo por Pessoa
                           </span>
-                        )}
-                      </span>
-                      <div className="text-right">
-                        <span className="text-[10px] text-gray-400 block uppercase font-bold">Total Sugerido</span>
-                        <span className="text-base font-black text-red-600">{recommendedMeatKg.toFixed(2).replace('.', ',')} kg</span>
-                      </div>
-                    </div>
+                          <span className="text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-bold">
+                            {gramsPerPerson}g / pessoa
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-center gap-2 sm:gap-3 py-1">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateGramsPerPerson(gramsPerPerson - 50)}
+                            className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-600 font-bold hover:bg-gray-100 text-xs transition-colors"
+                            title="Diminuir 50g"
+                          >
+                            -50
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateGramsPerPerson(gramsPerPerson - 25)}
+                            className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-white border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 flex items-center justify-center text-xl shadow-2xs transition-colors"
+                            title="Diminuir 25g"
+                          >
+                            -
+                          </button>
+                          <div className="relative">
+                            <div className="flex items-center bg-white border border-slate-300 rounded-lg px-2 py-1 shadow-inner focus-within:ring-2 focus-within:ring-red-500">
+                              <input
+                                type="number"
+                                min="50"
+                                max="2000"
+                                step="25"
+                                value={gramsPerPerson || ''}
+                                onChange={e => handleUpdateGramsPerPerson(parseInt(e.target.value) || 400)}
+                                className="w-16 sm:w-20 text-center text-2xl sm:text-3xl font-black text-gray-900 bg-transparent outline-none"
+                              />
+                              <span className="text-xs font-bold text-gray-400 ml-1">g</span>
+                            </div>
+                            <span className="block text-[10px] text-gray-400 text-center mt-0.5">gramas por pessoa</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateGramsPerPerson(gramsPerPerson + 25)}
+                            className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-white border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 flex items-center justify-center text-xl shadow-2xs transition-colors"
+                            title="Adicionar 25g"
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateGramsPerPerson(gramsPerPerson + 50)}
+                            className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-600 font-bold hover:bg-gray-100 text-xs transition-colors"
+                            title="Adicionar 50g"
+                          >
+                            +50
+                          </button>
+                        </div>
+
+                        {/* Presets de consumo */}
+                        <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-1 flex-wrap text-xs">
+                          <span className="text-[11px] text-slate-500 font-medium">Padrões:</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => { applyPreset('leve'); handleUpdateGramsPerPerson(350); }}
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                                gramsPerPerson === 350 ? 'bg-amber-600 text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                              }`}
+                            >
+                              Leve (350g)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { applyPreset('padrao'); handleUpdateGramsPerPerson(400); }}
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                                gramsPerPerson === 400 ? 'bg-red-600 text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                              }`}
+                            >
+                              Padrão (400g)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { applyPreset('festa'); handleUpdateGramsPerPerson(500); }}
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                                gramsPerPerson === 500 ? 'bg-purple-600 text-white' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                              }`}
+                            >
+                              Farto (500g)
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between text-xs font-semibold uppercase text-slate-700">
+                          <span className="flex items-center gap-1.5">
+                            <Scale className="w-4 h-4 text-indigo-600" />
+                            Peso Total de Carnes
+                          </span>
+                          <span className="text-indigo-800 bg-indigo-100 px-2 py-0.5 rounded-full font-bold">
+                            {customTotalWeightKg.toFixed(1)} kg total
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-center gap-2 sm:gap-3 py-1">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTotalWeight(customTotalWeightKg - 5)}
+                            className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-600 font-bold hover:bg-gray-100 text-xs transition-colors"
+                            title="Diminuir 5 kg"
+                          >
+                            -5k
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTotalWeight(customTotalWeightKg - 0.5)}
+                            className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-white border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 flex items-center justify-center text-xl shadow-2xs transition-colors"
+                            title="Diminuir 0.5 kg"
+                          >
+                            -
+                          </button>
+                          <div className="relative">
+                            <div className="flex items-center bg-white border border-slate-300 rounded-lg px-2 py-1 shadow-inner focus-within:ring-2 focus-within:ring-indigo-500">
+                              <input
+                                type="number"
+                                min="0.5"
+                                max="500"
+                                step="0.5"
+                                value={customTotalWeightKg || ''}
+                                onChange={e => handleUpdateTotalWeight(parseFloat(e.target.value) || 0)}
+                                className="w-16 sm:w-20 text-center text-2xl sm:text-3xl font-black text-gray-900 bg-transparent outline-none"
+                              />
+                              <span className="text-xs font-bold text-gray-400 ml-1">kg</span>
+                            </div>
+                            <span className="block text-[10px] text-gray-400 text-center mt-0.5">peso total do churrasco</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTotalWeight(customTotalWeightKg + 0.5)}
+                            className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-white border border-gray-300 text-gray-700 font-bold hover:bg-gray-100 flex items-center justify-center text-xl shadow-2xs transition-colors"
+                            title="Adicionar 0.5 kg"
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTotalWeight(customTotalWeightKg + 5)}
+                            className="w-8 h-8 rounded-lg bg-white border border-gray-300 text-gray-600 font-bold hover:bg-gray-100 text-xs transition-colors"
+                            title="Adicionar 5 kg"
+                          >
+                            +5k
+                          </button>
+                        </div>
+
+                        {/* Atalhos rápidos de peso em kg */}
+                        <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-1 flex-wrap text-xs">
+                          <span className="text-[11px] text-slate-500 font-medium">Atalhos kg:</span>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {[5, 10, 12, 15, 20, 25, 30, 40, 50].map(k => (
+                              <button
+                                key={k}
+                                type="button"
+                                onClick={() => handleUpdateTotalWeight(k)}
+                                className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                                  Math.round(customTotalWeightKg) === k
+                                    ? 'bg-indigo-600 text-white shadow-xs'
+                                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                                }`}
+                              >
+                                {k}k
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
-                {/* Auxiliary estimates banner */}
-                <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-100 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-red-900 uppercase">Estimativas de Apoio:</span>
-                    <span className="text-gray-700">
-                      🔥 Carvão / Lenha sugerido: <strong>~{recommendedCharcoalKg} kg</strong>
-                    </span>
-                    <span className="text-gray-400">•</span>
-                    <span className="text-gray-700">
-                      🧊 Gelo em sacos: <strong>~{recommendedIceBags} sacos (5kg)</strong>
-                    </span>
+                {/* PAINEL DINÂMICO: Resultado do Cálculo de Carne por Pessoa */}
+                <div className="bg-gradient-to-r from-red-50 via-orange-50 to-amber-50 border border-red-200 rounded-xl p-4 shadow-2xs">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black uppercase text-red-900 tracking-wide">
+                          Resultado do Cálculo:
+                        </span>
+                        <span className="bg-red-600 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full shadow-2xs">
+                          {meatCalcDetails.gramsPerPerson}g por pessoa ({meatCalcDetails.kgPerPerson} kg)
+                        </span>
+                        <span className="bg-white/90 border border-red-200 text-red-800 text-xs font-bold px-2 py-0.5 rounded-full">
+                          Categoria: {meatCalcDetails.appetiteLabel}
+                        </span>
+                      </div>
+                      <p className="text-xs text-red-950 font-medium leading-relaxed">
+                        {totalGuests} pessoas × {meatCalcDetails.gramsPerPerson}g = <strong className="text-red-700 font-black">{recommendedMeatKg.toFixed(2).replace('.', ',')} kg de carne</strong> no total.
+                        <span className="text-gray-600 ml-1">({meatCalcDetails.appetiteDescription})</span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 self-end md:self-center shrink-0">
+                      <label className="flex items-center gap-1.5 text-xs text-gray-700 font-semibold cursor-pointer select-none bg-white/80 px-2.5 py-1.5 rounded-lg border border-red-100 hover:bg-white transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={autoDistributeOnChange}
+                          onChange={e => setAutoDistributeOnChange(e.target.checked)}
+                          className="rounded text-red-600 focus:ring-red-500 w-3.5 h-3.5"
+                        />
+                        <span>Auto-distribuir cortes</span>
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={handleDistributeMeats}
+                        className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors"
+                        title="Distribuir peso proporcionalmente entre as carnes selecionadas"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Distribuir {recommendedMeatKg.toFixed(1)}kg nos Cortes
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleDistributeMeats}
-                    className="bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Distribuir {recommendedMeatKg.toFixed(1)}kg entre as Carnes
-                  </button>
+
+                  {/* Estimativas de Apoio (Carvão e Gelo) */}
+                  <div className="mt-3 pt-2.5 border-t border-red-200/60 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span>🔥 Carvão / Lenha sugerido: <strong className="text-gray-900">~{recommendedCharcoalKg} kg</strong></span>
+                      <span>•</span>
+                      <span>🧊 Gelo: <strong className="text-gray-900">~{recommendedIceBags} sacos (5kg)</strong></span>
+                      {durationHours > 4 && (
+                        <>
+                          <span>•</span>
+                          <span className="text-amber-800 font-semibold">
+                            ⏱️ Duração: {durationHours}h (+{((durationHours - 4) * 5)}% no consumo)
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1537,7 +1958,12 @@ export default function Churrasco() {
                 {/* Sub-block A: Acompanhamentos */}
                 <div className="space-y-2">
                   <div className="flex flex-wrap justify-between items-center gap-2 text-xs font-bold text-gray-700 uppercase">
-                    <span>🥗 Acompanhamentos & Guarnições</span>
+                    <div className="flex items-center gap-2">
+                      <span>🥗 Acompanhamentos & Guarnições</span>
+                      <span className="text-[10px] font-normal text-gray-500 lowercase hidden sm:inline">
+                        (personalize qtd e valor unitário)
+                      </span>
+                    </div>
                     <div className="flex items-center gap-2">
                       <span className="text-gray-500 font-normal">Subtotal: {formatCurrency(sidesSubtotal)}</span>
                       <button
@@ -1553,47 +1979,80 @@ export default function Churrasco() {
                     {sides.map(side => (
                       <div
                         key={side.id}
-                        className={`flex items-center justify-between p-2.5 rounded-lg border text-xs transition-all ${
+                        className={`p-2.5 rounded-lg border text-xs transition-all flex flex-col justify-between gap-2 ${
                           side.selected
-                            ? 'bg-emerald-50/50 border-emerald-200'
+                            ? 'bg-emerald-50/60 border-emerald-300 shadow-2xs'
                             : 'bg-gray-50 border-gray-200 opacity-60'
                         }`}
                       >
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={side.selected}
-                            onChange={() => handleToggleSide(side.id)}
-                            className="w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer"
-                          />
-                          <span className="font-medium text-gray-800">{side.name}</span>
-                          {side.isCustom && (
-                            <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1 rounded font-semibold">custom</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min="1"
-                            disabled={!side.selected}
-                            value={side.quantity}
-                            onChange={e => handleUpdateSideQty(side.id, parseInt(e.target.value) || 1)}
-                            className="w-12 text-center py-0.5 border border-gray-300 rounded font-semibold text-xs"
-                          />
-                          <span className="text-gray-400 text-[11px]">{side.unit}</span>
-                          <span className="font-bold text-gray-900 ml-1">
-                            {formatCurrency(side.total)}
-                          </span>
+                        <div className="flex items-start justify-between gap-2">
+                          <label className="flex items-center gap-2 cursor-pointer select-none flex-1">
+                            <input
+                              type="checkbox"
+                              checked={side.selected}
+                              onChange={() => handleToggleSide(side.id)}
+                              className="w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer shrink-0"
+                            />
+                            <span className={`font-semibold ${side.selected ? 'text-gray-900' : 'text-gray-700'}`}>
+                              {side.name}
+                            </span>
+                            {side.isCustom && (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-bold shrink-0">
+                                custom
+                              </span>
+                            )}
+                          </label>
                           {side.isCustom && (
                             <button
                               type="button"
                               onClick={() => handleRemoveSide(side.id)}
-                              className="text-gray-400 hover:text-red-600 p-0.5"
+                              className="text-gray-400 hover:text-red-600 p-0.5 transition-colors shrink-0"
                               title="Excluir item"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-emerald-100/70 text-xs">
+                          {/* Quantidade */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] text-gray-500 font-medium">Qtd:</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              disabled={!side.selected}
+                              value={side.quantity}
+                              onChange={e => handleUpdateSideQty(side.id, parseFloat(e.target.value) || 0)}
+                              className="w-12 text-center py-0.5 px-1 border border-gray-300 rounded font-semibold text-xs bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-1 focus:ring-emerald-500 outline-none"
+                              title="Quantidade"
+                            />
+                            <span className="text-gray-400 text-[11px]">{side.unit}</span>
+                          </div>
+
+                          {/* Preço Unitário */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] text-gray-500 font-medium">Valor:</span>
+                            <span className="text-gray-400 text-[11px]">R$</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              disabled={!side.selected}
+                              value={side.price}
+                              onChange={e => handleUpdateSidePrice(side.id, parseFloat(e.target.value) || 0)}
+                              className="w-16 text-right py-0.5 px-1 border border-gray-300 rounded font-bold text-xs bg-white text-emerald-900 disabled:bg-gray-100 disabled:text-gray-400 focus:ring-1 focus:ring-emerald-500 outline-none"
+                              title="Valor unitário do acompanhamento"
+                            />
+                          </div>
+
+                          {/* Subtotal */}
+                          <div className="text-right ml-auto sm:ml-0">
+                            <span className="font-extrabold text-gray-900 text-xs">
+                              {formatCurrency(side.total)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1603,7 +2062,12 @@ export default function Churrasco() {
                 {/* Sub-block B: Bebidas & Suprimentos */}
                 <div className="space-y-2 pt-2 border-t border-gray-100">
                   <div className="flex flex-wrap justify-between items-center gap-2 text-xs font-bold text-gray-700 uppercase">
-                    <span>🍻 Bebidas, Gelo & Carvão</span>
+                    <div className="flex items-center gap-2">
+                      <span>🍻 Bebidas, Gelo & Carvão</span>
+                      <span className="text-[10px] font-normal text-gray-500 lowercase hidden sm:inline">
+                        (personalize qtd e valor unitário)
+                      </span>
+                    </div>
                     <div className="flex items-center gap-2">
                       <span className="text-gray-500 font-normal">Subtotal: {formatCurrency(drinksSubtotal)}</span>
                       <button
@@ -1619,46 +2083,80 @@ export default function Churrasco() {
                     {drinks.map(drink => (
                       <div
                         key={drink.id}
-                        className={`flex items-center justify-between p-2.5 rounded-lg border text-xs transition-all ${
+                        className={`p-2.5 rounded-lg border text-xs transition-all flex flex-col justify-between gap-2 ${
                           drink.selected
-                            ? 'bg-amber-50/50 border-amber-200'
+                            ? 'bg-amber-50/60 border-amber-300 shadow-2xs'
                             : 'bg-gray-50 border-gray-200 opacity-60'
                         }`}
                       >
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={drink.selected}
-                            onChange={() => handleToggleDrink(drink.id)}
-                            className="w-4 h-4 text-amber-600 rounded border-gray-300 focus:ring-amber-500 cursor-pointer"
-                          />
-                          <span className="font-medium text-gray-800">{drink.name}</span>
-                          {drink.isCustom && (
-                            <span className="text-[10px] bg-amber-100 text-amber-800 px-1 rounded font-semibold">custom</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min="1"
-                            disabled={!drink.selected}
-                            value={drink.quantity}
-                            onChange={e => handleUpdateDrinkQty(drink.id, parseInt(e.target.value) || 1)}
-                            className="w-12 text-center py-0.5 border border-gray-300 rounded font-semibold text-xs"
-                          />
-                          <span className="font-bold text-gray-900 ml-1">
-                            {formatCurrency(drink.total)}
-                          </span>
+                        <div className="flex items-start justify-between gap-2">
+                          <label className="flex items-center gap-2 cursor-pointer select-none flex-1">
+                            <input
+                              type="checkbox"
+                              checked={drink.selected}
+                              onChange={() => handleToggleDrink(drink.id)}
+                              className="w-4 h-4 text-amber-600 rounded border-gray-300 focus:ring-amber-500 cursor-pointer shrink-0"
+                            />
+                            <span className={`font-semibold ${drink.selected ? 'text-gray-900' : 'text-gray-700'}`}>
+                              {drink.name}
+                            </span>
+                            {drink.isCustom && (
+                              <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-bold shrink-0">
+                                custom
+                              </span>
+                            )}
+                          </label>
                           {drink.isCustom && (
                             <button
                               type="button"
                               onClick={() => handleRemoveDrink(drink.id)}
-                              className="text-gray-400 hover:text-red-600 p-0.5"
+                              className="text-gray-400 hover:text-red-600 p-0.5 transition-colors shrink-0"
                               title="Excluir item"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-amber-100/70 text-xs">
+                          {/* Quantidade */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] text-gray-500 font-medium">Qtd:</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              disabled={!drink.selected}
+                              value={drink.quantity}
+                              onChange={e => handleUpdateDrinkQty(drink.id, parseFloat(e.target.value) || 0)}
+                              className="w-12 text-center py-0.5 px-1 border border-gray-300 rounded font-semibold text-xs bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-1 focus:ring-amber-500 outline-none"
+                              title="Quantidade"
+                            />
+                            <span className="text-gray-400 text-[11px]">{drink.unit}</span>
+                          </div>
+
+                          {/* Preço Unitário */}
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] text-gray-500 font-medium">Valor:</span>
+                            <span className="text-gray-400 text-[11px]">R$</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              disabled={!drink.selected}
+                              value={drink.price}
+                              onChange={e => handleUpdateDrinkPrice(drink.id, parseFloat(e.target.value) || 0)}
+                              className="w-16 text-right py-0.5 px-1 border border-gray-300 rounded font-bold text-xs bg-white text-amber-900 disabled:bg-gray-100 disabled:text-gray-400 focus:ring-1 focus:ring-amber-500 outline-none"
+                              title="Valor unitário da bebida/insumo"
+                            />
+                          </div>
+
+                          {/* Subtotal */}
+                          <div className="text-right ml-auto sm:ml-0">
+                            <span className="font-extrabold text-gray-900 text-xs">
+                              {formatCurrency(drink.total)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     ))}

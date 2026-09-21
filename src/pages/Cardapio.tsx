@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { collection, query, onSnapshot, doc, getDoc } from "firebase/firestore";
+import { collection, query, onSnapshot, doc, getDoc, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { ShoppingBag, ChevronRight, MapPin, Truck, Plus, Minus, Trash2, Smartphone, Banknote, CreditCard, QrCode } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { useStoreSettings } from "../contexts/StoreSettingsContext";
 
 interface Product {
   id: string;
@@ -17,6 +18,7 @@ interface CartItem extends Product {
 }
 
 export default function Cardapio() {
+  const { logoUrl, storeName } = useStoreSettings();
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -145,7 +147,7 @@ export default function Cardapio() {
 
   const subtotal = cart.reduce((sum, item) => sum + parsedPrice(item.price) * item.quantity, 0);
 
-  const handleSendOrder = () => {
+  const handleSendOrder = async () => {
     if (!customerName.trim() || !address.trim()) {
       alert("Por favor, preencha nome e endereço para a entrega.");
       return;
@@ -153,6 +155,31 @@ export default function Cardapio() {
     if (!whatsappNumber) {
       alert("O número de WhatsApp da loja não está configurado. Por favor, contate o restaurante.");
       return;
+    }
+
+    // Also register order in Firestore so PDV/Kitchen receives instant Push Notification & Audio Chime
+    try {
+      const orderPayload = {
+        type: "delivery",
+        status: "open",
+        items: cart.map((item) => ({
+          productId: item.id || "unknown",
+          name: item.name || "Produto",
+          price: parsedPrice(item.price),
+          quantity: Number(item.quantity) || 1,
+          observation: item.observation || "",
+          productionStatus: "pending",
+        })),
+        total: Number(subtotal) || 0,
+        customerName: customerName.trim(),
+        deliveryAddress: address.trim(),
+        paymentMethod,
+        observations: observations.trim(),
+        createdAt: new Date().toISOString(),
+      };
+      await addDoc(collection(db, "orders"), orderPayload);
+    } catch (err) {
+      console.warn("Não foi possível registrar o pedido no banco em tempo real:", err);
     }
 
     const itemsText = cart
@@ -192,11 +219,19 @@ export default function Cardapio() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
       {/* Header Public */}
-      <header className="bg-orange-600 text-white p-4 shadow-md sticky top-0 z-20">
+      <header className="bg-gray-900 border-b border-gray-800 text-white p-3 sm:p-4 shadow-md sticky top-0 z-20">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShoppingBag className="w-6 h-6" />
-            <h1 className="text-xl font-black tracking-tight">ALAMBARI DEFUMADOS</h1>
+          <div className="flex items-center gap-3">
+            <img
+              src={logoUrl || "/logo.png"}
+              alt={storeName || "Alambari Defumados"}
+              className="h-10 w-10 sm:h-12 sm:w-12 rounded-full object-cover border-2 border-red-600 shadow-sm shrink-0"
+              referrerPolicy="no-referrer"
+            />
+            <div>
+              <h1 className="text-lg sm:text-xl font-black tracking-tight leading-none text-white">{storeName || "ALAMBARI DEFUMADOS"}</h1>
+              <p className="text-[11px] sm:text-xs text-red-500 font-semibold tracking-wider">Cardápio Digital & Pedidos</p>
+            </div>
           </div>
           {step === "checkout" && (
             <button

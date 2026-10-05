@@ -25,20 +25,25 @@ import {
   MessageCircle,
   Wallet,
   Bell,
+  Scale,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
 import { executePrint } from "../lib/printHelper";
+import WeightModal, { formatKg } from "../components/WeightModal";
 
 interface Product {
   id: string;
   name: string;
   price: number;
   category: string;
+  unit?: 'unidade' | 'kg';
+  stock?: number;
 }
 
 interface CartItem extends Product {
   quantity: number;
+  unit?: 'unidade' | 'kg';
   observation?: string;
 }
 
@@ -71,6 +76,11 @@ export default function Delivery() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingOnlineOrders, setPendingOnlineOrders] = useState<any[]>([]);
   const [activePendingOrderId, setActivePendingOrderId] = useState<string | null>(null);
+
+  // Weight / Kilo modal state
+  const [weighingProduct, setWeighingProduct] = useState<Product | null>(null);
+  const [isWeighModalOpen, setIsWeighModalOpen] = useState(false);
+  const [weighingCartItem, setWeighingCartItem] = useState<CartItem | null>(null);
 
   useEffect(() => {
     // Get open cashier session
@@ -113,6 +123,7 @@ export default function Delivery() {
           id: doc.id,
           ...data,
           category: normalizedCategory,
+          unit: data.unit || 'unidade',
         } as Product);
       });
       setProducts(prods);
@@ -151,17 +162,82 @@ export default function Delivery() {
 
   const [addedItemName, setAddedItemName] = useState<string | null>(null);
 
-  const addToCart = (product: Product) => {
+  const openWeighModalForCartItem = (item: CartItem) => {
+    const prod = products.find((p) => p.id === item.id) || {
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      category: item.category || 'Carnes / Defumados',
+      unit: 'kg'
+    };
+    setWeighingProduct(prod);
+    setWeighingCartItem(item);
+    setIsWeighModalOpen(true);
+  };
+
+  const handleConfirmWeight = (weightKg: number, obs: string) => {
+    if (!weighingProduct) return;
+    setCart((prev) => {
+      const existing = prev.find((item) => item.id === weighingProduct.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.id === weighingProduct.id
+            ? {
+                ...item,
+                quantity: weightKg,
+                unit: 'kg',
+                observation: obs !== undefined && obs !== '' ? obs : item.observation,
+              }
+            : item
+        );
+      }
+      return [
+        ...prev,
+        {
+          ...weighingProduct,
+          quantity: weightKg,
+          unit: 'kg',
+          observation: obs || '',
+        },
+      ];
+    });
+    setIsWeighModalOpen(false);
+    setWeighingProduct(null);
+    setWeighingCartItem(null);
+  };
+
+  const addToCart = (product: Product, customQty?: number, customObs?: string) => {
+    if (product.unit === 'kg' && customQty === undefined) {
+      const existing = cart.find((item) => item.id === product.id);
+      setWeighingProduct(product);
+      setWeighingCartItem(existing || null);
+      setIsWeighModalOpen(true);
+      return;
+    }
+
+    const qtyToAdd = customQty !== undefined ? customQty : 1;
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
         return prev.map((item) =>
           item.id === product.id
-            ? { ...item, quantity: Number(item.quantity) + 1 }
+            ? { 
+                ...item, 
+                quantity: product.unit === 'kg' && customQty !== undefined ? customQty : Number(item.quantity) + qtyToAdd,
+                observation: customObs !== undefined ? customObs : (item.observation || ''),
+              }
             : item,
         );
       }
-      return [...prev, { ...product, quantity: 1, observation: "" }];
+      return [
+        ...prev, 
+        { 
+          ...product, 
+          unit: product.unit || 'unidade',
+          quantity: qtyToAdd, 
+          observation: customObs || "" 
+        }
+      ];
     });
     
     setAddedItemName(product.name);
@@ -172,13 +248,17 @@ export default function Delivery() {
 
   const updateQuantity = (id: string, delta: number) => {
     setCart((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const newQ = Number(item.quantity) + delta;
-          return newQ > 0 ? { ...item, quantity: newQ } : item;
-        }
-        return item;
-      }),
+      prev
+        .map((item) => {
+          if (item.id === id) {
+            const isKg = item.unit === 'kg';
+            const stepVal = isKg ? (delta > 0 ? 0.05 : -0.05) : delta;
+            const newQ = Math.round((Number(item.quantity) + stepVal) * 1000) / 1000;
+            return newQ > 0 ? { ...item, quantity: newQ } : null;
+          }
+          return item;
+        })
+        .filter(Boolean) as CartItem[]
     );
   };
 
@@ -595,25 +675,65 @@ export default function Delivery() {
                           const cartItem = cart.find(
                             (item) => item.id === product.id,
                           );
+                          const isKg = product.unit === 'kg';
                           return (
                             <motion.button
                               whileTap={{ scale: 0.95 }}
                               key={`prod-${product.id}-${index}`}
-                              onClick={() => addToCart(product)}
-                              className="relative border rounded-xl p-4 text-left hover:border-orange-500 hover:shadow-lg transition-all bg-white flex flex-col h-full group overflow-hidden"
+                              onClick={() => {
+                                if (isKg) {
+                                  setWeighingProduct(product);
+                                  setWeighingCartItem(cartItem || null);
+                                  setIsWeighModalOpen(true);
+                                } else {
+                                  addToCart(product);
+                                }
+                              }}
+                              className={`relative border-2 rounded-xl p-4 text-left hover:shadow-lg transition-all bg-white flex flex-col h-full group overflow-hidden cursor-pointer ${
+                                cartItem
+                                  ? isKg ? "border-amber-500 bg-amber-50/20" : "border-orange-500 bg-orange-50/20"
+                                  : "border-gray-200 hover:border-orange-400"
+                              }`}
                             >
-                              <div className="absolute top-0 left-0 w-full h-1 bg-orange-100 group-hover:bg-orange-500 transition-colors"></div>
-                              <span className="font-bold text-gray-800 flex-1 text-lg leading-tight mb-2">
+                              <div className={`absolute top-0 left-0 w-full h-1.5 transition-colors ${
+                                isKg ? "bg-amber-500" : "bg-orange-500"
+                              }`}></div>
+
+                              <div className="flex items-center justify-between gap-1 mb-1.5">
+                                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                  isKg 
+                                    ? "bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1"
+                                    : "bg-gray-100 text-gray-700"
+                                }`}>
+                                  {isKg ? "⚖️ Cobrança por Kg" : "Unidade"}
+                                </span>
+                                {cartItem && (
+                                  <span className={`text-white text-xs font-black px-2 py-0.5 rounded-full shadow-xs ${
+                                    isKg ? "bg-amber-600" : "bg-orange-600"
+                                  }`}>
+                                    {isKg
+                                      ? `${Number(cartItem.quantity).toFixed(3).replace(".", ",")} kg`
+                                      : `${cartItem.quantity} un`}
+                                  </span>
+                                )}
+                              </div>
+
+                              <span className="font-bold text-gray-800 flex-1 text-base sm:text-lg leading-tight mb-2">
                                 {product.name}
                               </span>
-                              <div className="flex items-center justify-between mt-auto pt-3">
+
+                              <div className="flex items-baseline justify-between mt-auto pt-2 border-t border-gray-100">
                                 <span className="text-orange-600 font-black text-lg">
                                   R${" "}
                                   {parsedPrice(product.price).toFixed(2).replace(".", ",")}
+                                  <span className="text-xs text-gray-500 font-bold ml-1">
+                                    {isKg ? "/ kg" : "/ un"}
+                                  </span>
                                 </span>
-                                {cartItem && (
-                                  <span className="bg-orange-600 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-sm">
-                                    {cartItem.quantity}
+                                {isKg && (
+                                  <span className="text-[11px] text-amber-700 font-extrabold flex items-center gap-0.5">
+                                    <Scale className="w-3.5 h-3.5" />
+                                    Pesar
                                   </span>
                                 )}
                               </div>
@@ -689,67 +809,97 @@ export default function Delivery() {
                 ) : (
                   <div className="flex flex-col gap-4">
                     <AnimatePresence mode="popLayout">
-                      {cart.map((item) => (
-                        <motion.div
-                          layout
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-                          transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                          key={item.id}
-                          className="flex flex-col gap-3 items-start bg-white border border-gray-200 rounded-xl p-4 shadow-sm"
-                        >
-                        <div className="w-full flex justify-between items-start gap-2">
-                           <div className="flex-1 flex flex-col gap-1">
-                              <p className="font-bold text-gray-800 text-lg leading-tight flex items-center gap-2">
-                                {item.name}
-                              </p>
-                              <p className="text-gray-600 font-medium">
-                                R$ {parsedPrice(item.price).toFixed(2).replace(".", ",")}
-                              </p>
-                           </div>
-                           <button
-                             onClick={() => removeFromCart(item.id)}
-                             className="text-red-400 hover:text-red-600 p-2 rounded-lg transition-colors border border-transparent hover:bg-red-50"
-                             title="Remover"
-                           >
-                             <Trash2 className="w-5 h-5" />
-                           </button>
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Observação (Ex: sem cebola)"
-                          value={item.observation || ""}
-                          onChange={(e) =>
-                            updateObservation(item.id, e.target.value)
-                          }
-                          className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg p-2 focus:ring-2 focus:ring-orange-500 outline-none"
-                        />
-                        <div className="w-full flex justify-between items-center mt-2 border-t pt-3 border-gray-100">
-                          <div className="flex items-center space-x-2 bg-gray-100 p-1.5 rounded-lg border border-gray-200">
-                            <button
-                              onClick={() => updateQuantity(item.id, -1)}
-                              className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700"
-                            >
-                              <Minus className="w-5 h-5" />
-                            </button>
-                            <span className="w-8 text-center font-black text-gray-800 text-lg">
-                              {item.quantity}
-                            </span>
-                            <button
-                              onClick={() => updateQuantity(item.id, 1)}
-                              className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700"
-                            >
-                              <Plus className="w-5 h-5" />
-                            </button>
-                          </div>
-                          <p className="font-black text-gray-800 text-lg">
-                            R$ {(parsedPrice(item.price) * item.quantity).toFixed(2).replace(".", ",")}
-                          </p>
-                        </div>
-                      </motion.div>
-                    ))}
-                    </AnimatePresence>
+                      {cart.map((item) => {
+                        const isKg = item.unit === "kg";
+                        return (
+                          <motion.div
+                            layout
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                            key={item.id}
+                            className="flex flex-col gap-3 items-start bg-white border border-gray-200 rounded-xl p-4 shadow-sm"
+                          >
+                              <div className="w-full flex justify-between items-start gap-2">
+                                <div className="flex-1 flex flex-col gap-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                      isKg ? "bg-amber-100 text-amber-900 border border-amber-300" : "bg-slate-100 text-slate-700"
+                                    }`}>
+                                      {isKg ? "⚖️ Cobrança por Kg" : "Unidade"}
+                                    </span>
+                                  </div>
+                                  <p className="font-bold text-gray-800 text-lg leading-tight flex items-center gap-2">
+                                    {item.name}
+                                  </p>
+                                  <p className="text-gray-600 font-medium">
+                                    R$ {parsedPrice(item.price).toFixed(2).replace(".", ",")}
+                                    <span className="text-xs text-gray-500 font-bold ml-1">
+                                      {isKg ? "/ kg" : "/ un"}
+                                    </span>
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => removeFromCart(item.id)}
+                                  className="text-red-400 hover:text-red-600 p-2 rounded-lg transition-colors border border-transparent hover:bg-red-50 cursor-pointer"
+                                  title="Remover"
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </button>
+                              </div>
+                              <input
+                                type="text"
+                                placeholder="Observação (Ex: sem cebola)"
+                                value={item.observation || ""}
+                                onChange={(e) =>
+                                  updateObservation(item.id, e.target.value)
+                                }
+                                className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg p-2 focus:ring-2 focus:ring-orange-500 outline-none"
+                              />
+                              <div className="w-full flex justify-between items-center mt-2 border-t pt-3 border-gray-100 flex-wrap gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center space-x-2 bg-gray-100 p-1.5 rounded-lg border border-gray-200">
+                                    <button
+                                      onClick={() => updateQuantity(item.id, -1)}
+                                      className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700 cursor-pointer"
+                                      title={isKg ? "Diminuir 50g" : "Diminuir 1 un"}
+                                    >
+                                      <Minus className="w-5 h-5" />
+                                    </button>
+                                    <span className="min-w-[65px] text-center font-black text-gray-800 text-base">
+                                      {isKg
+                                        ? `${Number(item.quantity).toFixed(3).replace(".", ",")} kg`
+                                        : item.quantity}
+                                    </span>
+                                    <button
+                                      onClick={() => updateQuantity(item.id, 1)}
+                                      className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700 cursor-pointer"
+                                      title={isKg ? "Aumentar 50g" : "Aumentar 1 un"}
+                                    >
+                                      <Plus className="w-5 h-5" />
+                                    </button>
+                                  </div>
+                                  {isKg && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openWeighModalForCartItem(item)}
+                                      className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold rounded-lg text-xs flex items-center gap-1 transition-colors cursor-pointer"
+                                      title="Digitar peso exato ou valor em R$"
+                                    >
+                                      <Scale className="w-3.5 h-3.5 text-amber-700" />
+                                      Alterar Peso
+                                    </button>
+                                  )}
+                                </div>
+                                <p className="font-black text-gray-800 text-lg">
+                                  R$ {(parsedPrice(item.price) * item.quantity).toFixed(2).replace(".", ",")}
+                                </p>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </AnimatePresence>
                   </div>
                 )}
               </div>
@@ -964,7 +1114,11 @@ export default function Delivery() {
                 onClick={() => {
                   if (lastOrder) {
                     const itemsText = lastOrder.items
-                      .map((item: any) => `*${item.quantity}x* ${item.name} - R$ ${(parsedPrice(item.price) * item.quantity).toFixed(2).replace('.', ',')}`)
+                      .map((item: any) => {
+                        const isKg = item.unit === 'kg';
+                        const qtyStr = isKg ? `${Number(item.quantity).toFixed(3).replace('.', ',')} kg` : `${item.quantity}x`;
+                        return `*${qtyStr}* ${item.name} - R$ ${(parsedPrice(item.price) * item.quantity).toFixed(2).replace('.', ',')}`;
+                      })
                       .join('\n');
                     
                     let message = `*Olá, ${lastOrder.customerName}!* Aqui é do Alambari Defumados 🍖\n\nSeu pedido foi confirmado!\n\n`;
@@ -1008,6 +1162,20 @@ export default function Delivery() {
           </div>
         </div>
       )}
+
+      {/* Modal de Pesagem / Cobrança por Kilo */}
+      <WeightModal
+        isOpen={isWeighModalOpen}
+        product={weighingProduct}
+        initialWeight={weighingCartItem ? Number(weighingCartItem.quantity) : 0.5}
+        initialObservation={weighingCartItem?.observation || ""}
+        onClose={() => {
+          setIsWeighModalOpen(false);
+          setWeighingProduct(null);
+          setWeighingCartItem(null);
+        }}
+        onConfirm={handleConfirmWeight}
+      />
     </div>
   );
 }

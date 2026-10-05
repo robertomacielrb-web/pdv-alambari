@@ -23,20 +23,25 @@ import {
   Search,
   Filter,
   Wallet,
+  Scale,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
 import { executePrint } from "../lib/printHelper";
+import WeightModal, { formatKg } from "../components/WeightModal";
 
 interface Product {
   id: string;
   name: string;
   price: number;
   category: string;
+  unit?: 'unidade' | 'kg';
+  stock?: number;
 }
 
 interface CartItem extends Product {
   quantity: number;
+  unit?: 'unidade' | 'kg';
   observation?: string;
 }
 
@@ -65,6 +70,11 @@ export default function Balcao() {
   const [step, setStep] = useState<1 | 2>(1);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Weight / Kilo modal state
+  const [weighingProduct, setWeighingProduct] = useState<Product | null>(null);
+  const [isWeighModalOpen, setIsWeighModalOpen] = useState(false);
+  const [weighingCartItem, setWeighingCartItem] = useState<CartItem | null>(null);
+
   useEffect(() => {
     // Get open cashier session
     const qSession = query(
@@ -92,6 +102,7 @@ export default function Balcao() {
           id: doc.id,
           ...data,
           category: normalizedCategory,
+          unit: data.unit || 'unidade',
         } as Product);
       });
       setProducts(prods);
@@ -129,17 +140,84 @@ export default function Balcao() {
 
   const [addedItemName, setAddedItemName] = useState<string | null>(null);
 
-  const addToCart = (product: Product) => {
+  const openWeighModalForCartItem = (item: CartItem) => {
+    const prod = products.find(p => p.id === item.id) || {
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      category: item.category || 'Carnes / Defumados',
+      unit: 'kg'
+    };
+    setWeighingProduct(prod);
+    setWeighingCartItem(item);
+    setIsWeighModalOpen(true);
+  };
+
+  const handleConfirmWeight = (weightKg: number, obs: string) => {
+    if (!weighingProduct) return;
+    setCart((prev) => {
+      const existing = prev.find((item) => item.id === weighingProduct.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.id === weighingProduct.id
+            ? {
+                ...item,
+                quantity: weightKg,
+                unit: 'kg',
+                observation: obs !== undefined && obs !== '' ? obs : item.observation,
+              }
+            : item
+        );
+      }
+      return [
+        ...prev,
+        {
+          ...weighingProduct,
+          quantity: weightKg,
+          unit: 'kg',
+          observation: obs || '',
+        },
+      ];
+    });
+    setIsWeighModalOpen(false);
+    setWeighingProduct(null);
+    setWeighingCartItem(null);
+    setAddedItemName(`${weighingProduct.name} (${formatKg(weightKg)})`);
+    setTimeout(() => setAddedItemName(null), 1500);
+  };
+
+  const addToCart = (product: Product, customQty?: number, customObs?: string) => {
+    if (product.unit === 'kg' && customQty === undefined) {
+      const existing = cart.find((item) => item.id === product.id);
+      setWeighingProduct(product);
+      setWeighingCartItem(existing || null);
+      setIsWeighModalOpen(true);
+      return;
+    }
+
+    const qtyToAdd = customQty !== undefined ? customQty : 1;
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
         return prev.map((item) =>
           item.id === product.id
-            ? { ...item, quantity: Number(item.quantity) + 1 }
+            ? {
+                ...item,
+                quantity: product.unit === 'kg' && customQty !== undefined ? customQty : Number(item.quantity) + qtyToAdd,
+                observation: customObs !== undefined ? customObs : (item.observation || ''),
+              }
             : item,
         );
       }
-      return [...prev, { ...product, quantity: 1, observation: "" }];
+      return [
+        ...prev,
+        {
+          ...product,
+          unit: product.unit || 'unidade',
+          quantity: qtyToAdd,
+          observation: customObs || "",
+        },
+      ];
     });
 
     setAddedItemName(product.name);
@@ -150,13 +228,17 @@ export default function Balcao() {
 
   const updateQuantity = (id: string, delta: number) => {
     setCart((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const newQ = Number(item.quantity) + delta;
-          return newQ > 0 ? { ...item, quantity: newQ } : item;
-        }
-        return item;
-      }),
+      prev
+        .map((item) => {
+          if (item.id === id) {
+            const isKg = item.unit === 'kg';
+            const stepVal = isKg ? (delta > 0 ? 0.05 : -0.05) : delta;
+            const newQ = Math.round((Number(item.quantity) + stepVal) * 1000) / 1000;
+            return newQ > 0 ? { ...item, quantity: newQ } : null;
+          }
+          return item;
+        })
+        .filter(Boolean) as CartItem[]
     );
   };
 
@@ -193,31 +275,45 @@ export default function Balcao() {
   const subtotal = cart.reduce((sum, item) => sum + parsedPrice(item.price) * (Number(item.quantity) || 1), 0);
   const total = Math.max(0, subtotal - (Number(discount) || 0));
 
+  const totalKg = cart
+    .filter((item) => item.unit === "kg")
+    .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+
   const handlePrint = (order: any) => {
     const itemsHtml = order.items
       .map(
-        (item: any) => `
+        (item: any) => {
+          const isKg = item.unit === 'kg';
+          const qtyText = isKg ? `${Number(item.quantity).toFixed(3).replace('.', ',')} kg` : `${item.quantity}x`;
+          const subTotalText = (parsedPrice(item.price) * item.quantity).toFixed(2).replace('.', ',');
+          return `
       <tr>
         <td style="padding: 5px 0;">
-          ${item.name} x${item.quantity}
+          ${item.name} (${qtyText})
+          ${isKg ? `<br><small style="font-size: 10px; color: #555;">R$ ${parsedPrice(item.price).toFixed(2).replace('.', ',')}/kg</small>` : ''}
           ${item.observation ? `<br><small style="font-size: 10px; font-style: italic;">Obs: ${item.observation}</small>` : ""}
         </td>
-        <td style="text-align: right; padding: 5px 0;">R$ ${(parsedPrice(item.price) * item.quantity).toFixed(2).replace(".", ",")}</td>
+        <td style="text-align: right; padding: 5px 0;">R$ ${subTotalText}</td>
       </tr>
-    `,
+    `;
+        }
       )
       .join("");
 
     const productionItemsHtml = order.items
       .map(
-        (item: any) => `
+        (item: any) => {
+          const isKg = item.unit === 'kg';
+          const qtyText = isKg ? `${Number(item.quantity).toFixed(3).replace('.', ',')} kg` : `${item.quantity}x`;
+          return `
       <tr>
         <td style="padding: 10px 0; border-bottom: 1px dotted #000;">
-          <strong>${item.quantity}x</strong> ${item.name}
+          <strong>${qtyText}</strong> ${item.name}
           ${item.observation ? `<br><span style="font-size: 14px; font-weight: bold; display: block; margin-top: 5px; padding: 3px; border: 1px solid #000;">Obs: ${item.observation}</span>` : ""}
         </td>
       </tr>
-    `,
+    `;
+        }
       )
       .join("");
 

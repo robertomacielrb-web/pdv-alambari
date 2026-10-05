@@ -14,7 +14,8 @@ import {
   RotateCcw, 
   Filter, 
   DollarSign, 
-  Package 
+  Package,
+  Scale
 } from 'lucide-react';
 
 interface Product {
@@ -592,11 +593,16 @@ export default function Produtos() {
                     {groupedProducts[category].sort((a,b) => a.name.localeCompare(b.name)).map((product) => (
                       <tr key={product.id} className="hover:bg-gray-50/80 transition-colors">
                         <td className="px-5 py-3.5 whitespace-nowrap text-sm font-medium text-gray-900">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span>{product.name}</span>
-                            {product.unit === 'kg' && (
-                              <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded">
-                                KG
+                            {product.unit === 'kg' ? (
+                              <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-black px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <Scale className="w-3 h-3 text-amber-700" />
+                                Cobrança por Kg
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-1.5 py-0.5 rounded">
+                                UN
                               </span>
                             )}
                             {product.erpOnly && (
@@ -609,6 +615,9 @@ export default function Produtos() {
                         <td className="px-5 py-3.5 whitespace-nowrap text-sm text-gray-500">{product.category}</td>
                         <td className="px-5 py-3.5 whitespace-nowrap text-sm font-semibold text-gray-900">
                           R$ {product.price.toFixed(2).replace('.', ',')}
+                          {product.unit === 'kg' && (
+                            <span className="text-xs text-amber-800 font-bold ml-1 bg-amber-50 px-1 py-0.5 rounded">/ kg</span>
+                          )}
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap text-sm text-gray-600">
                           {product.wholesalePrice !== undefined ? `R$ ${product.wholesalePrice.toFixed(2).replace('.', ',')}` : '-'}
@@ -729,20 +738,79 @@ export default function Produtos() {
                     </div>
                   )}
                 </div>
+                {/* Tipo de Cobrança / Unidade de Medida */}
+                <div className="bg-gray-50/90 p-3.5 rounded-xl border border-gray-200">
+                  <label className="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">
+                    Tipo de Cobrança / Unidade
+                  </label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, unit: 'unidade' })}
+                      className={`p-3 rounded-xl border-2 font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        formData.unit === 'unidade'
+                          ? 'bg-white border-red-600 text-red-700 shadow-sm ring-1 ring-red-600'
+                          : 'bg-white/60 border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <Package className="w-5 h-5 text-gray-600" />
+                      <span className="font-extrabold text-sm">Por Unidade (un)</span>
+                      <span className="text-[10px] font-normal text-gray-500 text-center leading-tight">
+                        Lanches, bebidas, porções prontas
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, unit: 'kg' })}
+                      className={`p-3 rounded-xl border-2 font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        formData.unit === 'kg'
+                          ? 'bg-amber-50 border-amber-600 text-amber-900 shadow-sm ring-1 ring-amber-600'
+                          : 'bg-white/60 border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <Scale className="w-5 h-5 text-amber-600" />
+                      <span className="font-extrabold text-sm text-amber-900">Cobrança por Quilo (kg)</span>
+                      <span className="text-[10px] font-normal text-amber-800 text-center leading-tight">
+                        Carnes defumadas, costela, queijos
+                      </span>
+                    </button>
+                  </div>
+
+                  {formData.unit === 'kg' && (
+                    <div className="mt-3 bg-amber-100/90 border border-amber-300 text-amber-900 rounded-lg p-2.5 text-xs flex items-start gap-2 animate-fadeIn">
+                      <Scale className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="block font-bold">Cobrança por Quilo / Balança ativada</strong>
+                        <p className="text-[11px] text-amber-800 leading-tight mt-0.5">
+                          O preço abaixo deve ser <strong>por quilo (R$/kg)</strong>. No atendimento de Mesas e Balcão, ao adicionar este item o sistema abrirá a janela de pesagem para informar o peso em gramas ou calcular o peso a partir do valor desejado pelo cliente.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Preço Varejo (R$)</label>
+                    <label className="block text-sm font-medium text-gray-700">
+                      {formData.unit === 'kg' ? 'Preço Varejo por Kg (R$/kg)' : 'Preço Varejo (R$)'}
+                    </label>
                     <input
                       type="text"
                       required
                       value={formData.price}
                       onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                       placeholder="0.00"
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border"
+                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border font-bold"
                     />
+                    {formData.unit === 'kg' && (
+                      <span className="text-[11px] text-amber-700 font-semibold block mt-1">Ex: R$ 89,90 por quilo</span>
+                    )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Preço Atacado (R$)</label>
+                    <label className="block text-sm font-medium text-gray-700">
+                      {formData.unit === 'kg' ? 'Preço Atacado por Kg (R$/kg)' : 'Preço Atacado (R$)'}
+                    </label>
                     <input
                       type="text"
                       value={formData.wholesalePrice}
@@ -752,19 +820,11 @@ export default function Produtos() {
                     />
                   </div>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Unidade de Medida</label>
-                  <select
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value as 'unidade' | 'kg' })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border bg-white"
-                  >
-                    <option value="unidade">Unidade (un)</option>
-                    <option value="kg">Quilograma (kg)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Preço de Custo (R$)</label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    {formData.unit === 'kg' ? 'Preço de Custo por Kg (R$/kg)' : 'Preço de Custo (R$)'}
+                  </label>
                   <input
                     type="text"
                     value={formData.costPrice}
@@ -775,9 +835,12 @@ export default function Produtos() {
                   <p className="text-xs text-gray-500 mt-1">Opcional, usado para cálculo de CMV no Fluxo de Caixa</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Estoque Opcional (Quant.)</label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    {formData.unit === 'kg' ? 'Estoque Opcional em Quilos (kg)' : 'Estoque Opcional (Quant. un)'}
+                  </label>
                   <input
                     type="number"
+                    step={formData.unit === 'kg' ? "0.01" : "1"}
                     value={formData.stock}
                     onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                     placeholder="Deixe em branco p/ não controlar"

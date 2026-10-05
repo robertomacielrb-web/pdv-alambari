@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { collection, query, onSnapshot, doc, getDoc, addDoc } from "firebase/firestore";
 import { db } from "../firebase";
-import { ShoppingBag, ChevronRight, MapPin, Truck, Plus, Minus, Trash2, Smartphone, Banknote, CreditCard, QrCode } from "lucide-react";
+import { ShoppingBag, ChevronRight, MapPin, Truck, Plus, Minus, Trash2, Smartphone, Banknote, CreditCard, QrCode, Scale, CheckCircle2, MessageCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useStoreSettings } from "../contexts/StoreSettingsContext";
 
@@ -10,6 +10,7 @@ interface Product {
   name: string;
   price: number;
   category: string;
+  unit?: 'unidade' | 'kg';
 }
 
 interface CartItem extends Product {
@@ -18,13 +19,15 @@ interface CartItem extends Product {
 }
 
 export default function Cardapio() {
-  const { logoUrl, storeName } = useStoreSettings();
+  const { logoUrl, storeName, whatsappNumber: contextWhatsapp } = useStoreSettings();
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [whatsappNumber, setWhatsappNumber] = useState<string>("");
   const [step, setStep] = useState<"catalog" | "checkout">("catalog");
+  const [orderPlaced, setOrderPlaced] = useState(false);
+  const [lastWhatsappUrl, setLastWhatsappUrl] = useState<string>("");
 
   // Checkout Form
   const [customerName, setCustomerName] = useState("");
@@ -44,6 +47,7 @@ export default function Cardapio() {
           id: doc.id,
           ...data,
           category: data.category ? data.category.trim() : "",
+          unit: data.unit || "unidade",
         } as Product);
       });
       setProducts(prods);
@@ -149,12 +153,18 @@ export default function Cardapio() {
 
   const handleSendOrder = async () => {
     if (!customerName.trim() || !address.trim()) {
-      alert("Por favor, preencha nome e endereço para a entrega.");
+      alert("Por favor, preencha seu nome e endereço para a entrega.");
       return;
     }
-    if (!whatsappNumber) {
-      alert("O número de WhatsApp da loja não está configurado. Por favor, contate o restaurante.");
-      return;
+
+    const effectivePhone = (whatsappNumber || contextWhatsapp || "").trim();
+    const cleanedDigits = effectivePhone.replace(/\D/g, "");
+    let phoneWithCountry = "";
+    if (cleanedDigits) {
+      phoneWithCountry =
+        cleanedDigits.length <= 11 && cleanedDigits.length >= 10
+          ? `55${cleanedDigits}`
+          : cleanedDigits;
     }
 
     // Also register order in Firestore so PDV/Kitchen receives instant Push Notification & Audio Chime
@@ -167,6 +177,7 @@ export default function Cardapio() {
           name: item.name || "Produto",
           price: parsedPrice(item.price),
           quantity: Number(item.quantity) || 1,
+          unit: item.unit || "unidade",
           observation: item.observation || "",
           productionStatus: "pending",
         })),
@@ -183,17 +194,24 @@ export default function Cardapio() {
     }
 
     const itemsText = cart
-      .map(
-        (item) =>
-          `*${item.quantity}x* ${item.name} - R$ ${(parsedPrice(item.price) * item.quantity).toFixed(2).replace(".", ",")}${
-            item.observation ? `\n   _Obs: ${item.observation}_` : ""
-          }`
-      )
+      .map((item) => {
+        const isKg = item.unit === "kg";
+        const qtyLabel = isKg ? `${item.quantity} kg` : `${item.quantity}x`;
+        const itemTotal = (parsedPrice(item.price) * item.quantity).toFixed(2).replace(".", ",");
+        let line = `• *${qtyLabel}* ${item.name} - R$ ${itemTotal}`;
+        if (isKg) {
+          line += ` _(R$ ${parsedPrice(item.price).toFixed(2).replace(".", ",")}/kg)_`;
+        }
+        if (item.observation) {
+          line += `\n   _Obs: ${item.observation}_`;
+        }
+        return line;
+      })
       .join("\n");
 
     let message = `*NOVO PEDIDO (DELIVERY)* 🛵\n\n`;
-    message += `*Cliente:* ${customerName}\n`;
-    message += `*Endereço:* ${address}\n\n`;
+    message += `*Cliente:* ${customerName.trim()}\n`;
+    message += `*Endereço:* ${address.trim()}\n\n`;
     message += `*ITENS DO PEDIDO:*\n${itemsText}\n\n`;
     const paymentLabels = {
       dinheiro: "Dinheiro",
@@ -205,15 +223,28 @@ export default function Cardapio() {
     if (paymentMethod === "dinheiro" && troco) {
       message += `*Troco para:* R$ ${troco}\n`;
     }
-    if (observations) {
-      message += `\n*Observações Gerais:*\n${observations}\n`;
+    if (observations.trim()) {
+      message += `\n*Observações Gerais:*\n${observations.trim()}\n`;
     }
     message += `\n*TOTAL: R$ ${subtotal.toFixed(2).replace(".", ",")}*`;
 
     const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+    const whatsappUrl = phoneWithCountry
+      ? `https://api.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodedMessage}`
+      : `https://api.whatsapp.com/send?text=${encodedMessage}`;
 
-    window.open(whatsappUrl, "_blank");
+    setLastWhatsappUrl(whatsappUrl);
+    setOrderPlaced(true);
+
+    // Reliable opening: try window.open, and fallback to direct window.location
+    try {
+      const opened = window.open(whatsappUrl, "_blank");
+      if (!opened || opened.closed || typeof opened.closed === "undefined") {
+        window.location.href = whatsappUrl;
+      }
+    } catch {
+      window.location.href = whatsappUrl;
+    }
   };
 
   return (
@@ -292,16 +323,31 @@ export default function Cardapio() {
                           className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col hover:border-orange-200 transition-colors"
                         >
                           <div className="flex-1">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              {product.unit === 'kg' ? (
+                                <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                                  <Scale className="w-3 h-3 text-amber-700" />
+                                  Cobrança por Kg
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-gray-100 text-gray-600 font-semibold px-2 py-0.5 rounded-full">
+                                  Unidade
+                                </span>
+                              )}
+                            </div>
                             <h3 className="font-bold text-gray-900 leading-tight mb-1">
                               {product.name}
                             </h3>
-                            <p className="text-orange-600 font-extrabold text-lg mt-2">
-                              R$ {parsedPrice(product.price).toFixed(2).replace(".", ",")}
+                            <p className="text-orange-600 font-extrabold text-lg mt-2 flex items-baseline gap-1">
+                              <span>R$ {parsedPrice(product.price).toFixed(2).replace(".", ",")}</span>
+                              <span className="text-xs font-bold text-gray-500">
+                                {product.unit === 'kg' ? '/ kg' : '/ un'}
+                              </span>
                             </p>
                           </div>
                           <button
                             onClick={() => addToCart(product)}
-                            className="mt-4 w-full bg-orange-50 text-orange-700 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-orange-100 transition-colors"
+                            className="mt-4 w-full bg-orange-50 text-orange-700 py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-orange-100 transition-colors cursor-pointer"
                           >
                             <Plus className="w-5 h-5" /> Adicionar
                           </button>
@@ -534,13 +580,57 @@ export default function Cardapio() {
                 </p>
                 <button
                   onClick={handleSendOrder}
-                  className="w-full bg-green-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-black text-lg py-4 rounded-2xl shadow-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <Truck className="w-6 h-6" />
+                  <MessageCircle className="w-6 h-6" />
                   Enviar Pedido p/ WhatsApp
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação & Fallback Direto do WhatsApp */}
+      {orderPlaced && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 text-center shadow-2xl space-y-4">
+            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 className="w-9 h-9" />
+            </div>
+
+            <div>
+              <h3 className="text-xl font-black text-gray-900">
+                Pedido Registrado! 🛵🎉
+              </h3>
+              <p className="text-gray-600 text-sm mt-1.5 leading-relaxed">
+                Seu pedido foi registrado em nossa cozinha. Caso a janela do WhatsApp não tenha aberto automaticamente no seu aparelho, clique no botão abaixo para concluir o envio da mensagem:
+              </p>
+            </div>
+
+            <div className="space-y-2.5 pt-2">
+              <a
+                href={lastWhatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-black py-3.5 px-4 rounded-2xl shadow-md transition-colors flex items-center justify-center gap-2 text-base"
+              >
+                <MessageCircle className="w-5 h-5" />
+                Abrir Mensagem no WhatsApp
+              </a>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderPlaced(false);
+                  setCart([]);
+                  setStep("catalog");
+                }}
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-2xl transition-colors text-sm"
+              >
+                Fazer Novo Pedido / Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}

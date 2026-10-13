@@ -1,8 +1,28 @@
 @import "tailwindcss";
 
-/* Smooth scrolling behavior */
+/* Smooth scrolling behavior and tablet touch optimizations */
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Fast tap response and tap highlight removal for tablet POS */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent accidental text selection when double tapping buttons or cards on touchscreens */
+button,
+[role="button"],
+.select-none {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* ========================================================

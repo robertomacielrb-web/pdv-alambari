@@ -1016,8 +1016,8 @@ export default function Mesas() {
       </div>
 
       {selectedTable && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-4xl h-[95vh] sm:h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-5xl h-[96vh] md:h-[92vh] flex flex-col overflow-hidden shadow-2xl">
             <div className="p-4 border-b bg-gray-50 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-bold text-gray-800">

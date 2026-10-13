@@ -37,7 +37,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
 import { executePrint } from "../lib/printHelper";
-import WeightModal, { formatKg } from "../components/WeightModal";
+import WeightModal, { formatKg, parseItemQuantity } from "../components/WeightModal";
 
 interface Product {
   id: string;
@@ -238,12 +238,20 @@ export default function Mesas() {
     setSelectedTable(tableNumber);
     const existingOrder = openTables.find((t) => t.tableNumber === tableNumber);
     if (existingOrder) {
-      setCart((existingOrder.items || []).map((item: any) => ({
-        ...item,
-        id: item.id || item.productId || "unknown",
-        unit: item.unit || (item.name?.toLowerCase().includes('/kg') || item.name?.toLowerCase().includes(' kg') ? 'kg' : 'unidade'),
-        quantity: Number(item.quantity) || 1,
-      })));
+      setCart((existingOrder.items || []).map((item: any) => {
+        const prod = products.find((p) => p.id === (item.id || item.productId));
+        const isKg =
+          item.unit === 'kg' ||
+          prod?.unit === 'kg' ||
+          (item.name?.toLowerCase().includes('/kg') || item.name?.toLowerCase().includes(' kg'));
+        const qty = parseItemQuantity(item.quantity) || 1;
+        return {
+          ...item,
+          id: item.id || item.productId || "unknown",
+          unit: isKg ? 'kg' : 'unidade',
+          quantity: qty,
+        };
+      }));
       setCustomerName(existingOrder.customerName || "");
       setCustomerPhone(existingOrder.customerPhone || "");
       setObservations(existingOrder.observations || "");
@@ -431,16 +439,16 @@ export default function Mesas() {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + parsedPrice(item.price) * (Number(item.quantity) || 1), 0);
+  const subtotal = cart.reduce((sum, item) => sum + parsedPrice(item.price) * parseItemQuantity(item.quantity), 0);
   const total = Math.max(0, subtotal - (Number(discount) || 0));
 
   const totalKg = cart
     .filter((item) => item.unit === "kg")
-    .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    .reduce((sum, item) => sum + parseItemQuantity(item.quantity), 0);
 
   const totalUnits = cart
     .filter((item) => item.unit !== "kg")
-    .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    .reduce((sum, item) => sum + parseItemQuantity(item.quantity), 0);
 
   const handleSaveTable = async (isAutoSave = false) => {
     if (!selectedTable) return;
@@ -1792,7 +1800,7 @@ export default function Mesas() {
       <WeightModal
         isOpen={isWeighModalOpen}
         product={weighingProduct}
-        initialWeight={weighingCartItem ? Number(weighingCartItem.quantity) : 0.5}
+        initialWeight={weighingCartItem ? parseItemQuantity(weighingCartItem.quantity) : 0.5}
         initialObservation={weighingCartItem?.observation || ""}
         onClose={() => {
           setIsWeighModalOpen(false);

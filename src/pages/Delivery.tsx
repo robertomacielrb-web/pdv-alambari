@@ -30,7 +30,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
 import { executePrint } from "../lib/printHelper";
-import WeightModal, { formatKg } from "../components/WeightModal";
+import WeightModal, { formatKg, parseItemQuantity } from "../components/WeightModal";
 
 interface Product {
   id: string;
@@ -292,7 +292,7 @@ export default function Delivery() {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + parsedPrice(item.price) * (Number(item.quantity) || 1), 0);
+  const subtotal = cart.reduce((sum, item) => sum + parsedPrice(item.price) * parseItemQuantity(item.quantity), 0);
   const total = Math.max(0, subtotal + (Number(deliveryFee) || 0) - (Number(discount) || 0));
 
   const handlePrint = (order: any) => {
@@ -1167,7 +1167,7 @@ export default function Delivery() {
       <WeightModal
         isOpen={isWeighModalOpen}
         product={weighingProduct}
-        initialWeight={weighingCartItem ? Number(weighingCartItem.quantity) : 0.5}
+        initialWeight={weighingCartItem ? parseItemQuantity(weighingCartItem.quantity) : 0.5}
         initialObservation={weighingCartItem?.observation || ""}
         onClose={() => {
           setIsWeighModalOpen(false);

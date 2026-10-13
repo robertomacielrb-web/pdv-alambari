@@ -32,7 +32,10 @@ import {
   Link as LinkIcon,
   Sparkles,
   Check,
-  X
+  X,
+  Maximize2,
+  Minimize2,
+  Monitor
 } from 'lucide-react';
 import { thermalPrinter } from '../lib/printer';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
@@ -40,9 +43,19 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useCashierAuth } from '../contexts/CashierAuthContext';
 import { useStoreSettings } from '../contexts/StoreSettingsContext';
+import { useFullscreen } from '../contexts/FullscreenContext';
 import { compressAndResizeImage } from '../lib/imageCompressor';
 
 export default function Configuracoes() {
+  const {
+    isFullscreen,
+    toggleFullscreen,
+    autoFullscreenEnabled,
+    setAutoFullscreenEnabled,
+    error: fullscreenError,
+    clearError: clearFullscreenError,
+  } = useFullscreen();
+
   const [printMode, setPrintMode] = useState<'browser' | 'bluetooth'>('browser');
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -742,6 +755,150 @@ export default function Configuracoes() {
             <Play className="w-3.5 h-3.5 text-amber-600" />
             Testar Alerta Mesa
           </button>
+        </div>
+      </div>
+
+      {/* Modo Tela Cheia (Fullscreen) */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4 mb-5">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-indigo-100 text-indigo-700 rounded-lg">
+              <Monitor className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                Modo Tela Cheia (Fullscreen)
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Amplie a área de visualização e elimine as barras do navegador para operar o PDV como um terminal dedicado.
+              </p>
+            </div>
+          </div>
+          <div>
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${
+                isFullscreen
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                  : 'bg-gray-100 text-gray-600 border border-gray-200'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isFullscreen ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'
+                }`}
+              />
+              {isFullscreen ? 'Tela Cheia Ativada' : 'Modo Janela Padrão'}
+            </span>
+          </div>
+        </div>
+
+        {fullscreenError && (
+          <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-lg text-xs flex items-center justify-between">
+            <span>{fullscreenError}</span>
+            <button
+              onClick={clearFullscreenError}
+              className="text-amber-900 font-bold hover:underline ml-2"
+            >
+              Fechar
+            </button>
+          </div>
+        )}
+
+        <div className="grid md:grid-cols-2 gap-4 mb-6">
+          {/* Card Ação Direta */}
+          <div className="border border-gray-200 rounded-xl p-4 bg-gradient-to-br from-gray-50 to-white flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                {isFullscreen ? (
+                  <Minimize2 className="w-5 h-5 text-indigo-600" />
+                ) : (
+                  <Maximize2 className="w-5 h-5 text-indigo-600" />
+                )}
+                <h3 className="font-bold text-gray-800 text-sm">
+                  {isFullscreen ? 'Sair do Modo Tela Cheia' : 'Ativar Modo Tela Cheia Agora'}
+                </h3>
+              </div>
+              <p className="text-xs text-gray-600 mb-4">
+                {isFullscreen
+                  ? 'O sistema está ocupando 100% da sua tela sem distrações. Clique no botão abaixo ou aperte a tecla ESC para restaurar o tamanho normal.'
+                  : 'Ocupe todo o monitor ou tablet, facilitando a navegação nos botões de mesas, pedidos e caixa.'}
+              </p>
+            </div>
+
+            <button
+              onClick={toggleFullscreen}
+              className={`w-full py-2.5 px-4 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer ${
+                isFullscreen
+                  ? 'bg-gray-800 hover:bg-gray-900 text-white'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+              }`}
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-4 h-4" /> Restaurar Janela Normal (Sair da Tela Cheia)
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-4 h-4" /> Entrar em Modo Tela Cheia
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Card Ativação Automática */}
+          <div className="border border-gray-200 rounded-xl p-4 bg-gradient-to-br from-gray-50 to-white flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  Tela Cheia Automática no PDV
+                </h3>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoFullscreenEnabled}
+                    onChange={(e) => setAutoFullscreenEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+              </div>
+              <p className="text-xs text-gray-600 mb-3">
+                Quando ativado, o sistema entra em tela cheia automaticamente logo no primeiro clique que o operador der na tela.
+              </p>
+            </div>
+            <div className="bg-indigo-50/70 border border-indigo-100 rounded-lg p-2.5 text-[11px] text-indigo-900">
+              💡 <b>Ideal para caixa dedicado:</b> Evita que atendentes vejam abas do navegador ou percam foco das vendas.
+            </div>
+          </div>
+        </div>
+
+        {/* Guia de Atalhos & Dicas */}
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs text-gray-700 space-y-2">
+          <p className="font-bold text-gray-800 flex items-center gap-1.5">
+            <Info className="w-4 h-4 text-indigo-600" />
+            Dicas & Atalhos de Teclado
+          </p>
+          <div className="grid sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+            <div className="bg-white p-2.5 rounded-lg border border-gray-200">
+              <span className="font-black text-gray-900 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-300 mr-1.5">
+                F11
+              </span>
+              <span className="text-gray-600">Atalho nativo universal para tela cheia em Windows e Linux.</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-lg border border-gray-200">
+              <span className="font-black text-gray-900 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-300 mr-1.5">
+                Esc
+              </span>
+              <span className="text-gray-600">Sai do modo tela cheia a qualquer momento.</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-lg border border-gray-200">
+              <span className="font-black text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 mr-1.5">
+                PWA / App
+              </span>
+              <span className="text-gray-600">Em celulares e tablets, use "Adicionar à Tela de Início" no navegador.</span>
+            </div>
+          </div>
         </div>
       </div>
 

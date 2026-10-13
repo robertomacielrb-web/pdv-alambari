@@ -30,8 +30,11 @@ export const PRESET_GRAMS = [
   { label: '600g', grams: 600 },
   { label: '750g', grams: 750 },
   { label: '1,0 kg', grams: 1000 },
+  { label: '1,2 kg', grams: 1200 },
   { label: '1,5 kg', grams: 1500 },
   { label: '2,0 kg', grams: 2000 },
+  { label: '2,5 kg', grams: 2500 },
+  { label: '3,0 kg', grams: 3000 },
 ];
 
 export const formatKg = (kg: number): string => {
@@ -149,9 +152,24 @@ export default function WeightModal({
       setTargetValueStr('0,00');
       return;
     }
-    const parsedGrams = parseFloat(text.replace(/[^\d.]/g, ''));
-    if (!isNaN(parsedGrams) && parsedGrams >= 0) {
-      const calculatedKg = Math.round(parsedGrams) / 1000;
+    // Normalize comma to dot for parsing
+    const normalized = text.trim().replace(',', '.');
+    const parsedNum = parseFloat(normalized);
+    if (!isNaN(parsedNum) && parsedNum > 0) {
+      // Smart detection: If user typed e.g. "1.5" or "0.8" or "2,3" in Grams mode (contains dot/comma or small float <= 15),
+      // they definitely meant Kilograms! E.g. 1.5 kg = 1500g
+      if ((normalized.includes('.') || text.includes(',')) && parsedNum <= 15) {
+        const asKg = Math.round(parsedNum * 1000) / 1000;
+        setWeightKg(asKg);
+        setKgInputStr(asKg.toFixed(3).replace('.', ','));
+        if (pricePerKg > 0) {
+          setTargetValueStr((asKg * pricePerKg).toFixed(2).replace('.', ','));
+        }
+        setWarningMessage(`Interpretado como ${asKg.toFixed(3).replace('.', ',')} kg (${Math.round(asKg * 1000)}g).`);
+        return;
+      }
+
+      const calculatedKg = Math.round(parsedNum) / 1000;
       setWeightKg(calculatedKg);
       setKgInputStr(calculatedKg.toFixed(3).replace('.', ','));
       if (pricePerKg > 0) {
@@ -167,6 +185,11 @@ export default function WeightModal({
       setWeightKg(0);
       setGramsInputStr('0');
       setTargetValueStr('0,00');
+      return;
+    }
+
+    // Allow typing trailing comma or dot without prematurely evaluating to 0
+    if (text.endsWith(',') || text.endsWith('.')) {
       return;
     }
 
@@ -201,6 +224,10 @@ export default function WeightModal({
       return;
     }
 
+    if (text.endsWith(',') || text.endsWith('.')) {
+      return;
+    }
+
     const parsedVal = parsePrice(text);
     if (!isNaN(parsedVal) && parsedVal >= 0 && pricePerKg > 0) {
       const calculatedKg = Math.round((parsedVal / pricePerKg) * 1000) / 1000;
@@ -219,6 +246,13 @@ export default function WeightModal({
 
   const handleNumpadPress = (digit: string) => {
     if (inputMode === 'grams') {
+      if (digit === ',') {
+        // If user presses comma while in grams, switch to KG mode so they can type decimals
+        setInputMode('kg');
+        const nextStr = (weightKg > 0 ? weightKg.toFixed(1).replace('.', ',') : '0') + ',';
+        setKgInputStr(nextStr);
+        return;
+      }
       const nextStr = gramsInputStr === '0' ? digit : gramsInputStr + digit;
       handleGramsChange(nextStr);
     } else if (inputMode === 'kg') {

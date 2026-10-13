@@ -24,11 +24,13 @@ import {
   Filter,
   Wallet,
   Scale,
+  Flame,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
 import { executePrint } from "../lib/printHelper";
 import WeightModal, { formatKg, parseItemQuantity } from "../components/WeightModal";
+import ImportChurrascoModal, { ImportedCartItem } from "../components/ImportChurrascoModal";
 
 interface Product {
   id: string;
@@ -75,6 +77,10 @@ export default function Balcao() {
   const [isWeighModalOpen, setIsWeighModalOpen] = useState(false);
   const [weighingCartItem, setWeighingCartItem] = useState<CartItem | null>(null);
 
+  // Churrasco integration state
+  const [isImportChurrascoOpen, setIsImportChurrascoOpen] = useState(false);
+  const [churrascoBanner, setChurrascoBanner] = useState<string | null>(null);
+
   useEffect(() => {
     // Get open cashier session
     const qSession = query(
@@ -113,6 +119,67 @@ export default function Balcao() {
       unsubProducts();
     };
   }, []);
+
+  // Check for transferred Churrasco Quote in sessionStorage on mount
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('churrasco_to_balcao');
+      if (stored) {
+        const data = JSON.parse(stored);
+        sessionStorage.removeItem('churrasco_to_balcao');
+        const itemsToLoad: CartItem[] = [];
+        if (data.meats) itemsToLoad.push(...data.meats);
+        if (data.sides) itemsToLoad.push(...data.sides);
+        if (data.drinks) itemsToLoad.push(...data.drinks);
+        if (data.services) itemsToLoad.push(...data.services);
+
+        if (itemsToLoad.length > 0) {
+          setCart(itemsToLoad);
+          if (data.clientName) setCustomerName(data.clientName);
+          if (data.discount) setDiscount(data.discount);
+          setChurrascoBanner(`Orçamento de Churrasco de "${data.clientName || 'Cliente'}" importado com sucesso! (${itemsToLoad.length} itens)`);
+          setTimeout(() => setChurrascoBanner(null), 8000);
+          setStep(2);
+        }
+      }
+    } catch (e) {
+      console.error('Error loading transferred churrasco quote:', e);
+    }
+  }, []);
+
+  const handleImportChurrascoItems = (importedItems: ImportedCartItem[], clientNameFromQuote?: string, discountFromQuote?: number) => {
+    setCart((prev) => {
+      return [...prev, ...importedItems];
+    });
+    if (clientNameFromQuote && !customerName) {
+      setCustomerName(clientNameFromQuote);
+    }
+    if (discountFromQuote && !discount) {
+      setDiscount(discountFromQuote);
+    }
+    setChurrascoBanner(`Itens do Churrasco adicionados ao pedido com sucesso! (${importedItems.length} itens)`);
+    setTimeout(() => setChurrascoBanner(null), 6000);
+    setStep(2);
+  };
+
+  // Toledo / Elgin Barcode parsing for scale barcodes: starts with 2
+  const handleBarcodeOrSearchChange = (val: string) => {
+    setSearchTerm(val);
+    const clean = val.trim();
+    if (clean.length === 12 || clean.length === 13) {
+      if (clean.startsWith('2')) {
+        const prodCode = clean.substring(1, 6);
+        const valuePart = parseInt(clean.substring(6, 11), 10);
+        const matched = products.find(p => p.id === prodCode || p.id.endsWith(prodCode) || (p as any).barcode === clean || (p as any).code === prodCode);
+        if (matched) {
+          const isWeight = matched.unit === 'kg';
+          const qty = isWeight ? valuePart / 1000 : 1;
+          addToCart(matched, qty);
+          setSearchTerm('');
+        }
+      }
+    }
+  };
 
   const groupedProducts = React.useMemo(() => {
     const filtered = products.filter((p) => {
@@ -526,27 +593,52 @@ export default function Balcao() {
               Selecione os Produtos
             </h2>
 
-            <div className="flex flex-1 sm:max-w-md gap-3">
+            <div className="flex flex-1 sm:max-w-lg gap-2 items-center">
               <div className="relative flex-1">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search className="h-4 w-4 text-gray-400" />
                 </div>
                 <input
                   type="text"
-                  placeholder="Buscar produto..."
+                  placeholder="Buscar produto ou bipar etiqueta da balança..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleBarcodeOrSearchChange(e.target.value)}
                   className="pl-9 w-full rounded-lg border-2 border-gray-200 p-2 text-sm focus:border-red-500 outline-none transition-all"
                 />
               </div>
+
+              {/* Import / Paste Churrasco button */}
+              <button
+                type="button"
+                onClick={() => setIsImportChurrascoOpen(true)}
+                className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow-2xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+                title="Importar orçamentos salvos ou colar texto de proposta de churrasco"
+              >
+                <Flame className="w-4 h-4 text-amber-700" />
+                <span className="hidden sm:inline">Importar / Colar</span> Churrasco
+              </button>
             </div>
 
             {cart.length > 0 && (
               <span className="bg-red-100 text-red-800 text-sm font-bold px-3 py-1 rounded-full whitespace-nowrap self-start sm:self-center">
-                {cart.reduce((acc, item) => acc + item.quantity, 0)} itens
+                {cart.length} {cart.length === 1 ? 'item' : 'itens'}
+                {totalKg > 0 && ` (${totalKg.toFixed(3).replace(".", ",")} kg)`}
               </span>
             )}
           </div>
+
+          {/* Churrasco Transferred Banner */}
+          {churrascoBanner && (
+            <div className="bg-emerald-50 border-b border-emerald-300 text-emerald-900 px-4 py-2.5 text-xs sm:text-sm font-bold flex items-center justify-between animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <Flame className="w-4 h-4 text-emerald-600" />
+                <span>{churrascoBanner}</span>
+              </div>
+              <button onClick={() => setChurrascoBanner(null)} className="text-emerald-700 hover:text-emerald-950 p-1 cursor-pointer font-bold">
+                ✕
+              </button>
+            </div>
+          )}
 
           <div className="bg-white border-b overflow-x-auto scrollbar-thin flex p-3 gap-2 whitespace-nowrap shrink-0">
             {categories.map((cat, idx) => (
@@ -586,25 +678,55 @@ export default function Balcao() {
                           const cartItem = cart.find(
                             (item) => item.id === product.id,
                           );
+                          const isKg = product.unit === 'kg';
                           return (
                             <motion.button
                               whileTap={{ scale: 0.95 }}
                               key={`prod-${product.id}-${index}`}
                               onClick={() => addToCart(product)}
-                              className="relative border rounded-xl p-4 text-left hover:border-red-500 hover:shadow-lg transition-all bg-white flex flex-col h-full group overflow-hidden"
+                              className={`relative border rounded-xl p-4 text-left transition-all bg-white flex flex-col h-full group overflow-hidden ${
+                                isKg ? "hover:border-amber-500 hover:shadow-lg" : "hover:border-red-500 hover:shadow-lg"
+                              }`}
                             >
-                              <div className="absolute top-0 left-0 w-full h-1 bg-red-100 group-hover:bg-red-500 transition-colors"></div>
-                              <span className="font-bold text-gray-800 flex-1 text-lg leading-tight mb-2">
+                              <div className={`absolute top-0 left-0 w-full h-1 transition-colors ${
+                                isKg ? "bg-amber-200 group-hover:bg-amber-500" : "bg-red-100 group-hover:bg-red-500"
+                              }`}></div>
+
+                              <div className="flex items-center justify-between gap-1 mb-1.5">
+                                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                  isKg 
+                                    ? "bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1"
+                                    : "bg-gray-100 text-gray-700"
+                                }`}>
+                                  {isKg ? "⚖️ Cobrança por Kg" : "Unidade"}
+                                </span>
+                                {cartItem && (
+                                  <span className={`text-white text-xs font-black px-2 py-0.5 rounded-full shadow-xs ${
+                                    isKg ? "bg-amber-600" : "bg-red-600"
+                                  }`}>
+                                    {isKg
+                                      ? `${Number(cartItem.quantity).toFixed(3).replace(".", ",")} kg`
+                                      : `${cartItem.quantity} un`}
+                                  </span>
+                                )}
+                              </div>
+
+                              <span className="font-bold text-gray-800 flex-1 text-base sm:text-lg leading-tight mb-2">
                                 {product.name}
                               </span>
-                              <div className="flex items-center justify-between mt-auto pt-3">
+
+                              <div className="flex items-baseline justify-between mt-auto pt-2 border-t border-gray-100">
                                 <span className="text-red-600 font-black text-lg">
                                   R${" "}
                                   {parsedPrice(product.price).toFixed(2).replace(".", ",")}
+                                  <span className="text-xs text-gray-500 font-bold ml-1">
+                                    {isKg ? "/ kg" : "/ un"}
+                                  </span>
                                 </span>
-                                {cartItem && (
-                                  <span className="bg-red-600 text-white text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full shadow-sm">
-                                    {cartItem.quantity}
+                                {isKg && (
+                                  <span className="text-[11px] text-amber-700 font-extrabold flex items-center gap-0.5">
+                                    <Scale className="w-3.5 h-3.5" />
+                                    Pesar
                                   </span>
                                 )}
                               </div>
@@ -714,16 +836,23 @@ export default function Balcao() {
                               <Trash2 className="w-3.5 h-3.5" /> Remover
                             </button>
                         </div>
-                        <p className="font-bold text-gray-800 text-base leading-tight flex items-center gap-2">
-                          {item.name}
-                          <button
-                            onClick={() => removeFromCart(item.id)}
-                            className="hidden md:flex text-red-400 hover:text-red-600 p-1.5 rounded-lg transition-colors border border-transparent hover:border-red-100 hover:bg-red-50"
-                            title="Remover"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-bold text-gray-800 text-base leading-tight flex items-center gap-2">
+                            {item.name}
+                            <button
+                              onClick={() => removeFromCart(item.id)}
+                              className="hidden md:flex text-red-400 hover:text-red-600 p-1.5 rounded-lg transition-colors border border-transparent hover:border-red-100 hover:bg-red-50 cursor-pointer"
+                              title="Remover"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </p>
+                          {item.unit === 'kg' && (
+                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                              ⚖️ Por Quilo
+                            </span>
+                          )}
+                        </div>
                         <input
                           type="text"
                           placeholder="Observação (opcional)"
@@ -738,22 +867,39 @@ export default function Balcao() {
                       {/* Quantity */}
                       <div className="col-span-3 lg:col-span-2 w-full flex flex-col md:flex-row md:items-center md:justify-center">
                         <div className="md:hidden text-gray-500 text-xs font-bold uppercase tracking-wider mb-1">Quantidade</div>
-                        <div className="flex items-center space-x-1 sm:space-x-2 bg-gray-100 p-1 md:p-1.5 rounded-lg border border-gray-200 w-auto self-start md:self-auto">
-                          <button
-                            onClick={() => updateQuantity(item.id, -1)}
-                            className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700 transition-colors"
-                          >
-                            <Minus className="w-4 h-4 sm:w-5 h-5" />
-                          </button>
-                          <span className="w-8 sm:w-10 text-center font-black text-gray-800 text-base md:text-lg">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateQuantity(item.id, 1)}
-                            className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700 transition-colors"
-                          >
-                            <Plus className="w-4 h-4 sm:w-5 h-5" />
-                          </button>
+                        <div className="flex flex-col items-center gap-1.5">
+                          <div className="flex items-center space-x-1 sm:space-x-2 bg-gray-100 p-1 md:p-1.5 rounded-lg border border-gray-200 w-auto self-start md:self-auto">
+                            <button
+                              onClick={() => updateQuantity(item.id, -1)}
+                              className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700 transition-colors cursor-pointer"
+                              title={item.unit === 'kg' ? "Diminuir 50g" : "Diminuir 1 un"}
+                            >
+                              <Minus className="w-4 h-4 sm:w-5 h-5" />
+                            </button>
+                            <span className="min-w-[70px] text-center font-black text-gray-800 text-sm md:text-base">
+                              {item.unit === 'kg'
+                                ? `${Number(item.quantity).toFixed(3).replace(".", ",")} kg`
+                                : item.quantity}
+                            </span>
+                            <button
+                              onClick={() => updateQuantity(item.id, 1)}
+                              className="p-1.5 bg-white rounded shadow-sm hover:bg-gray-50 text-gray-700 transition-colors cursor-pointer"
+                              title={item.unit === 'kg' ? "Aumentar 50g" : "Aumentar 1 un"}
+                            >
+                              <Plus className="w-4 h-4 sm:w-5 h-5" />
+                            </button>
+                          </div>
+                          {item.unit === 'kg' && (
+                            <button
+                              type="button"
+                              onClick={() => openWeighModalForCartItem(item)}
+                              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-black rounded-lg text-[11px] flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap"
+                              title="Alterar peso, escolher atalho ou digitar valor em R$"
+                            >
+                              <Scale className="w-3.5 h-3.5 text-amber-700" />
+                              Alterar Peso
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -983,6 +1129,13 @@ export default function Balcao() {
           setWeighingCartItem(null);
         }}
         onConfirm={handleConfirmWeight}
+      />
+
+      {/* Modal de Importação do Churrasco / Colar Proposta */}
+      <ImportChurrascoModal
+        isOpen={isImportChurrascoOpen}
+        onClose={() => setIsImportChurrascoOpen(false)}
+        onImport={handleImportChurrascoItems}
       />
     </div>
   );

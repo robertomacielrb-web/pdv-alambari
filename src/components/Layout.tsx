@@ -17,11 +17,14 @@ import {
   Activity,
   Flame,
   Bell,
-  Lock
+  Lock,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useCashierAuth } from '../contexts/CashierAuthContext';
 import { useStoreSettings } from '../contexts/StoreSettingsContext';
+import { useFullscreen } from '../contexts/FullscreenContext';
 import NotificationPermissionBanner from './NotificationPermissionBanner';
 import NotificationToastContainer from './NotificationToastContainer';
 import NotificationCenterModal from './NotificationCenterModal';
@@ -32,6 +35,7 @@ export default function Layout() {
   const { permission, openPermissionBanner } = useNotifications();
   const { isAuthenticated: isCashierAuthed, requireAuth: isCashierAuthRequired } = useCashierAuth();
   const { logoUrl, storeName } = useStoreSettings();
+  const { isFullscreen, toggleFullscreen } = useFullscreen();
 
   const navigation = [
     { name: 'Caixa', href: '/', icon: Calculator },
@@ -69,6 +73,18 @@ export default function Layout() {
 
         <div className="flex items-center gap-1">
           <button
+            onClick={toggleFullscreen}
+            className="p-2 text-gray-300 hover:text-white rounded-lg hover:bg-gray-800 transition-colors"
+            title={isFullscreen ? "Restaurar janela" : "Modo tela cheia"}
+            aria-label={isFullscreen ? "Sair da tela cheia" : "Entrar em tela cheia"}
+          >
+            {isFullscreen ? (
+              <Minimize2 className="h-5 w-5 text-emerald-400" />
+            ) : (
+              <Maximize2 className="h-5 w-5" />
+            )}
+          </button>
+          <button
             onClick={() => setIsNotifModalOpen(true)}
             className="p-2 text-gray-300 hover:text-white rounded-lg hover:bg-gray-800 relative transition-colors"
             title="Notificações & Alertas"
@@ -105,7 +121,7 @@ export default function Layout() {
           </div>
         </div>
         
-        <nav className="flex-1 px-2 py-4 space-y-1">
+        <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto scrollbar-thin">
           {navigation.map((item) => {
             const Icon = item.icon;
             return (
@@ -148,7 +164,39 @@ export default function Layout() {
           })}
         </nav>
 
-        <div className="p-3 border-t border-gray-800 space-y-3">
+        <div className="p-3 border-t border-gray-800 space-y-2">
+          {/* Quick Fullscreen Toggle Widget */}
+          <button
+            onClick={toggleFullscreen}
+            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gray-800/60 hover:bg-gray-800 border border-gray-700/60 text-left transition-all group cursor-pointer"
+            title={isFullscreen ? "Restaurar janela normal" : "Entrar em modo tela cheia (F11)"}
+          >
+            <div className="flex items-center gap-2.5">
+              {isFullscreen ? (
+                <Minimize2 className="w-4 h-4 text-emerald-400 group-hover:text-emerald-300 transition-colors" />
+              ) : (
+                <Maximize2 className="w-4 h-4 text-gray-300 group-hover:text-white transition-colors" />
+              )}
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-gray-200 leading-none mb-0.5">
+                  Tela Cheia
+                </span>
+                <span className="text-[10px] text-gray-400 leading-none">
+                  {isFullscreen ? 'Modo Imersivo' : 'Ativar F11'}
+                </span>
+              </div>
+            </div>
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                isFullscreen
+                  ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-700/60'
+                  : 'bg-gray-750 text-gray-400 border border-gray-700'
+              }`}
+            >
+              {isFullscreen ? 'Cheia' : 'Normal'}
+            </span>
+          </button>
+
           {/* Quick Push Notification Widget */}
           <button
             onClick={() => setIsNotifModalOpen(true)}

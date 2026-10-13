@@ -1,39 +1,170 @@
 @import "tailwindcss";
 
+/* Smooth scrolling behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ========================================================
+   UNIVERSAL MODERN SCROLLBAR SYSTEM (HIGH CONTRAST & CLEAN)
+   ======================================================== */
+
+/* Standard cross-browser scrollbar properties (Firefox, Chrome 121+, Safari 17.2+) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 rgba(0, 0, 0, 0.05);
+}
+
+/* WebKit-based browsers (Chrome, Edge, Safari, Opera) */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 9999px;
+  margin: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
+  border: 1px solid transparent;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: #475569;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Dark Containers & Sidebar scrollbar contrast */
+.bg-gray-900 ::-webkit-scrollbar-track,
+.bg-gray-800 ::-webkit-scrollbar-track,
+.dark ::-webkit-scrollbar-track,
+nav::-webkit-scrollbar-track,
+aside::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.bg-gray-900 ::-webkit-scrollbar-thumb,
+.bg-gray-800 ::-webkit-scrollbar-thumb,
+.dark ::-webkit-scrollbar-thumb,
+nav::-webkit-scrollbar-thumb,
+aside::-webkit-scrollbar-thumb {
+  background-color: #4b5563;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.bg-gray-900 ::-webkit-scrollbar-thumb:hover,
+.bg-gray-800 ::-webkit-scrollbar-thumb:hover,
+.dark ::-webkit-scrollbar-thumb:hover,
+nav::-webkit-scrollbar-thumb:hover,
+aside::-webkit-scrollbar-thumb:hover {
+  background-color: #6b7280;
+}
+
+.bg-gray-900 *,
+.bg-gray-800 *,
+nav,
+aside {
+  scrollbar-color: #4b5563 rgba(255, 255, 255, 0.06);
+}
+
+/* Utility Classes for Scrollbars */
 @layer utilities {
+  /* Thin scrollbar for compact containers and modal bodies */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 rgba(0, 0, 0, 0.05);
+  }
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 9999px;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #cbd5e1;
-    border-radius: 20px;
+    background-color: #94a3b8;
+    border-radius: 9999px;
+    border: 1px solid transparent;
+    background-clip: content-box;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: #64748b;
+  }
+
+  /* Highly visible scrollbar for wide tables and horizontal category chips */
+  .scrollbar-visible {
+    scrollbar-width: auto;
+    scrollbar-color: #94a3b8 #f1f5f9;
+  }
+  .scrollbar-visible::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-visible::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 9999px;
+    border: 1px solid #e2e8f0;
+  }
+  .scrollbar-visible::-webkit-scrollbar-thumb {
     background-color: #94a3b8;
+    border-radius: 9999px;
+  }
+  .scrollbar-visible::-webkit-scrollbar-thumb:hover {
+    background-color: #64748b;
+  }
+
+  /* Red/Brand highlighted scrollbar for cart and action drawers */
+  .scrollbar-brand {
+    scrollbar-width: thin;
+    scrollbar-color: #ef4444 rgba(239, 68, 68, 0.08);
+  }
+  .scrollbar-brand::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+  .scrollbar-brand::-webkit-scrollbar-track {
+    background: rgba(239, 68, 68, 0.06);
+    border-radius: 9999px;
+  }
+  .scrollbar-brand::-webkit-scrollbar-thumb {
+    background-color: #ef4444;
+    border-radius: 9999px;
+  }
+  .scrollbar-brand::-webkit-scrollbar-thumb:hover {
+    background-color: #dc2626;
+  }
+
+  /* Completely hidden scrollbar when clean gestures are preferred */
+  .scrollbar-none,
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar,
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
 
-/* Base custom scrollbar for the application */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-/* Interactive Range Slider enhancements */
+/* ========================================================
+   Interactive Range Slider enhancements
+   ======================================================== */
 input[type="range"] {
   accent-color: #dc2626;
 }
@@ -56,7 +187,7 @@ input[type="range"] {
   border-radius: 50%;
   background: #dc2626;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
   transition: transform 0.15s ease, background-color 0.15s ease;
 }
 
@@ -72,7 +203,7 @@ input[type="range"] {
   background: #dc2626;
   cursor: pointer;
   border: none;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
   transition: transform 0.15s ease, background-color 0.15s ease;
 }
 

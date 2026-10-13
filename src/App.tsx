@@ -4,6 +4,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { CashierAuthProvider } from './contexts/CashierAuthContext';
 import { StoreSettingsProvider } from './contexts/StoreSettingsContext';
+import { FullscreenProvider } from './contexts/FullscreenContext';
 import Layout from './components/Layout';
 import Caixa from './pages/Caixa';
 import Balcao from './pages/Balcao';
@@ -52,9 +53,11 @@ export default function App() {
       <StoreSettingsProvider>
         <NotificationProvider>
           <CashierAuthProvider>
-            <HashRouter>
-              <AppRoutes />
-            </HashRouter>
+            <FullscreenProvider>
+              <HashRouter>
+                <AppRoutes />
+              </HashRouter>
+            </FullscreenProvider>
           </CashierAuthProvider>
         </NotificationProvider>
       </StoreSettingsProvider>

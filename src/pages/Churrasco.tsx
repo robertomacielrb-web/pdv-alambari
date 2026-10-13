@@ -46,8 +46,10 @@ import {
   MessageSquare,
   Clock,
   ArrowRight,
-  History
+  History,
+  Store,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { 
   MeatItem, 
   SideItem, 
@@ -74,8 +76,10 @@ import {
 import { printChurrascoProposal, printChurrasqueiroList } from '../lib/churrascoPrint';
 import { exportChurrascoProposalPDF } from '../lib/churrascoPdf';
 import { useStoreSettings } from '../contexts/StoreSettingsContext';
+import { copyToClipboard } from '../lib/clipboard';
 
 export default function Churrasco() {
+  const navigate = useNavigate();
   const { logoUrl: globalLogoUrl, storeName: globalStoreName } = useStoreSettings();
   const [activeTab, setActiveTab] = useState<'calculadora' | 'orcamentos'>('calculadora');
   
@@ -590,18 +594,59 @@ export default function Churrasco() {
   // Import product from inventory
   const handleImportProduct = (prod: any) => {
     const price = prod.wholesalePrice || prod.price || 40;
-    const newMeat: MeatItem = {
-      id: 'prod_' + prod.id + '_' + Date.now(),
-      name: prod.name,
-      category: prod.category?.includes('Bov') ? 'Bovina' : prod.category?.includes('Suí') ? 'Suína' : prod.category?.includes('Fran') ? 'Frango' : 'Outros',
-      percentage: 15,
-      kg: 2,
-      pricePerKg: price,
-      total: Number((2 * price).toFixed(2)),
-      selected: true,
-      isCustom: true
-    };
-    setMeats(prev => [newMeat, ...prev]);
+    const cat = (prod.category || '').toLowerCase();
+
+    if (cat.includes('bebid') || cat.includes('refrig') || cat.includes('cervej') || cat.includes('suco') || cat.includes('água') || cat.includes('agua') || cat.includes('chopp')) {
+      const newDrink: DrinkItem = {
+        id: 'prod_' + prod.id + '_' + Date.now(),
+        name: prod.name,
+        quantity: 1,
+        unit: prod.unit || 'unidade',
+        price: price,
+        total: price,
+        selected: true,
+        isCustom: true
+      };
+      setDrinks(prev => [...prev, newDrink]);
+    } else if (cat.includes('acompanh') || cat.includes('salada') || cat.includes('arroz') || cat.includes('farofa') || cat.includes('pão') || cat.includes('pao') || cat.includes('vinagrete') || cat.includes('maionese')) {
+      const newSide: SideItem = {
+        id: 'prod_' + prod.id + '_' + Date.now(),
+        name: prod.name,
+        quantity: 1,
+        unit: prod.unit || 'porção',
+        price: price,
+        total: price,
+        selected: true,
+        isCustom: true
+      };
+      setSides(prev => [...prev, newSide]);
+    } else if (cat.includes('serviç') || cat.includes('servico')) {
+      const newService: ServiceItem = {
+        id: 'prod_' + prod.id + '_' + Date.now(),
+        name: prod.name,
+        quantity: 1,
+        unit: prod.unit || 'diária',
+        price: price,
+        total: price,
+        selected: true,
+        isCustom: true
+      };
+      setServices(prev => [...prev, newService]);
+    } else {
+      const meatCategory = cat.includes('bov') ? 'Bovina' : cat.includes('suí') || cat.includes('sui') ? 'Suína' : cat.includes('fran') ? 'Frango' : cat.includes('lingu') || cat.includes('embut') ? 'Embutidos' : 'Outros';
+      const newMeat: MeatItem = {
+        id: 'prod_' + prod.id + '_' + Date.now(),
+        name: prod.name,
+        category: meatCategory,
+        percentage: 15,
+        kg: prod.unit === 'kg' ? 2 : 1,
+        pricePerKg: price,
+        total: Number(((prod.unit === 'kg' ? 2 : 1) * price).toFixed(2)),
+        selected: true,
+        isCustom: true
+      };
+      setMeats(prev => [newMeat, ...prev]);
+    }
     setShowProductModal(false);
   };
 
@@ -893,13 +938,66 @@ export default function Churrasco() {
     }
   };
 
-  // Copy proposal text
-  const handleCopyProposal = () => {
+  // Copy proposal text safely (with fallback)
+  const handleCopyProposal = async () => {
     const quote = buildCurrentQuote();
     const msg = formatWhatsAppProposal(quote, storeSettings);
-    navigator.clipboard.writeText(msg);
-    setCopiedNotification(true);
-    setTimeout(() => setCopiedNotification(false), 3000);
+    const success = await copyToClipboard(msg);
+    if (success) {
+      setCopiedNotification(true);
+      setTimeout(() => setCopiedNotification(false), 3000);
+    } else {
+      alert('Não foi possível copiar automaticamente devido às permissões do navegador. Selecione o texto e copie manualmente.');
+    }
+  };
+
+  // Transfer / Send event quote directly to Balcao PDV
+  const handleSendToBalcao = (targetQuote?: EventQuote) => {
+    const quote = targetQuote || buildCurrentQuote();
+    const transferData = {
+      id: quote.id || ('quote_' + Date.now()),
+      clientName: quote.clientName || 'Cliente Churrasco',
+      clientPhone: quote.clientPhone || '',
+      discount: quote.discount || 0,
+      total: quote.total || 0,
+      timestamp: Date.now(),
+      meats: (quote.meats || []).filter(m => m.selected && m.kg > 0).map(m => ({
+        id: m.id,
+        name: m.name,
+        price: m.pricePerKg,
+        quantity: m.kg,
+        unit: 'kg',
+        category: 'Carnes / Churrasco',
+        observation: `Evento: ${quote.clientName || 'Churrasco'} (${quote.totalGuests || 0} convidados)`
+      })),
+      sides: (quote.sides || []).filter(s => s.selected && s.quantity > 0).map(s => ({
+        id: s.id,
+        name: s.name,
+        price: s.price,
+        quantity: s.quantity,
+        unit: s.unit?.toLowerCase().includes('kg') ? 'kg' : 'unidade',
+        category: 'Acompanhamentos'
+      })),
+      drinks: (quote.drinks || []).filter(d => d.selected && d.quantity > 0).map(d => ({
+        id: d.id,
+        name: d.name,
+        price: d.price,
+        quantity: d.quantity,
+        unit: 'unidade',
+        category: 'Bebidas'
+      })),
+      services: (quote.services || []).filter(srv => srv.selected && srv.quantity > 0).map(srv => ({
+        id: srv.id,
+        name: srv.name,
+        price: srv.price,
+        quantity: srv.quantity,
+        unit: 'unidade',
+        category: 'Serviços'
+      }))
+    };
+
+    sessionStorage.setItem('churrasco_to_balcao', JSON.stringify(transferData));
+    navigate('/balcao');
   };
 
   // Print full proposal
@@ -2639,6 +2737,17 @@ export default function Churrasco() {
                     <span>Baixar Proposta em PDF</span>
                   </button>
 
+                  {/* Send / Transfer to Balcao PDV */}
+                  <button
+                    type="button"
+                    onClick={() => handleSendToBalcao()}
+                    className="w-full bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-700 hover:to-amber-700 text-white font-extrabold py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition-all active:scale-98 cursor-pointer"
+                    title="Transferir carnes e itens para o caixa balcão para cobrança imediata"
+                  >
+                    <Store className="w-5 h-5" />
+                    <span>Lançar no Caixa Balcão (PDV)</span>
+                  </button>
+
                   <div className="grid grid-cols-2 gap-2">
                     {/* Print A4 Proposal */}
                     <button
@@ -2853,10 +2962,17 @@ export default function Churrasco() {
                       </div>
 
                       {/* Buttons */}
-                      <div className="grid grid-cols-4 gap-1.5 pt-1">
+                      <div className="grid grid-cols-6 gap-1.5 pt-1">
+                        <button
+                          onClick={() => handleSendToBalcao(quote)}
+                          className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg font-bold text-xs flex items-center justify-center shadow-xs cursor-pointer"
+                          title="Lançar Orçamento no Caixa Balcão (PDV)"
+                        >
+                          <Store className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleLoadQuote(quote)}
-                          className="bg-red-50 hover:bg-red-100 text-red-700 p-2 rounded-lg font-bold text-xs flex items-center justify-center"
+                          className="bg-red-50 hover:bg-red-100 text-red-700 p-2 rounded-lg font-bold text-xs flex items-center justify-center cursor-pointer"
                           title="Abrir na Calculadora para Editar"
                         >
                           <Edit3 className="w-4 h-4" />

@@ -213,6 +213,57 @@ service cloud.firestore {
       allow delete: if true;
     }
 
+    function isValidPurchaseOrder(data) {
+      return data.keys().hasAll(['supplierName', 'status', 'items', 'total', 'createdAt']) &&
+             isValidString(data.supplierName, 1, 150) &&
+             (data.status == 'rascunho' || data.status == 'enviado' || data.status == 'confirmado' || data.status == 'recebido' || data.status == 'cancelado') &&
+             data.items is list && data.items.size() <= 200 &&
+             isValidNumber(data.total, 0) &&
+             isValidDateString(data.createdAt) &&
+             (!('supplierPhone' in data) || data.supplierPhone is string) &&
+             (!('supplierContact' in data) || data.supplierContact is string) &&
+             (!('supplierCnpj' in data) || data.supplierCnpj is string) &&
+             (!('orderNumber' in data) || data.orderNumber is string) &&
+             (!('subtotal' in data) || isValidNumber(data.subtotal, 0)) &&
+             (!('discount' in data) || isValidNumber(data.discount, 0)) &&
+             (!('shippingFee' in data) || isValidNumber(data.shippingFee, 0)) &&
+             (!('expectedDeliveryDate' in data) || data.expectedDeliveryDate is string) &&
+             (!('paymentTerms' in data) || data.paymentTerms is string) &&
+             (!('notes' in data) || data.notes is string) &&
+             (!('updatedAt' in data) || isValidDateString(data.updatedAt)) &&
+             (!('receivedAt' in data) || data.receivedAt is string) &&
+             (!('syncedToBills' in data) || data.syncedToBills is bool);
+    }
+
+    match /purchase_orders/{orderId} {
+      allow read: if true;
+      allow create: if isValidPurchaseOrder(request.resource.data);
+      allow update: if isValidPurchaseOrder(request.resource.data);
+      allow delete: if true;
+    }
+
+    function isValidShoppingList(data) {
+      return data.keys().hasAll(['title', 'items', 'createdAt']) &&
+             isValidString(data.title, 1, 150) &&
+             data.items is list && data.items.size() <= 200 &&
+             isValidDateString(data.createdAt) &&
+             (!('supplierName' in data) || data.supplierName is string) &&
+             (!('supplierPhone' in data) || data.supplierPhone is string) &&
+             (!('targetDate' in data) || data.targetDate is string) &&
+             (!('status' in data) || (data.status == 'aberta' || data.status == 'em_compras' || data.status == 'concluida' || data.status == 'arquivada')) &&
+             (!('totalEstimated' in data) || isValidNumber(data.totalEstimated, 0)) &&
+             (!('totalActual' in data) || isValidNumber(data.totalActual, 0)) &&
+             (!('notes' in data) || data.notes is string) &&
+             (!('updatedAt' in data) || isValidDateString(data.updatedAt));
+    }
+
+    match /shopping_lists/{listId} {
+      allow read: if true;
+      allow create: if isValidShoppingList(request.resource.data);
+      allow update: if isValidShoppingList(request.resource.data);
+      allow delete: if true;
+    }
+
     match /settings/{docId} {
       allow read: if true;
       allow write: if true;

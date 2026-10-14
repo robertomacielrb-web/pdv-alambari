@@ -21,7 +21,9 @@ import {
   Maximize2,
   Minimize2,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  ShoppingBag,
+  ListChecks
 } from 'lucide-react';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useCashierAuth } from '../contexts/CashierAuthContext';
@@ -70,6 +72,7 @@ export default function Layout() {
     { name: 'ERP / Atacado', href: '/erp', icon: Package },
     { name: 'Produção', href: '/producao', icon: ChefHat },
     { name: 'Produtos', href: '/produtos', icon: Package },
+    { name: 'Lista de Compras', href: '/compras', icon: ListChecks },
     { name: 'Histórico', href: '/historico', icon: History },
     { name: 'Relatórios', href: '/relatorios', icon: BarChart2 },
     { name: 'Contas a Pagar', href: '/contas-pagar', icon: Receipt },

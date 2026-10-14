@@ -21,6 +21,7 @@ import ContasPagar from './pages/ContasPagar';
 import FluxoCaixa from './pages/FluxoCaixa';
 import ERP from './pages/ERP';
 import Churrasco from './pages/Churrasco';
+import Compras from './pages/Compras';
 
 function AppRoutes() {
   return (
@@ -37,6 +38,7 @@ function AppRoutes() {
         <Route path="erp" element={<ERP />} />
         <Route path="producao" element={<Producao />} />
         <Route path="produtos" element={<Produtos />} />
+        <Route path="compras" element={<Compras />} />
         <Route path="historico" element={<Historico />} />
         <Route path="relatorios" element={<Relatorios />} />
         <Route path="contas-pagar" element={<ContasPagar />} />

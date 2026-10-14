@@ -247,6 +247,8 @@ service cloud.firestore {
              isValidString(data.title, 1, 150) &&
              data.items is list && data.items.size() <= 200 &&
              isValidDateString(data.createdAt) &&
+             (!('destination' in data) || data.destination is string) &&
+             (!('buyerName' in data) || data.buyerName is string) &&
              (!('supplierName' in data) || data.supplierName is string) &&
              (!('supplierPhone' in data) || data.supplierPhone is string) &&
              (!('targetDate' in data) || data.targetDate is string) &&
@@ -254,6 +256,7 @@ service cloud.firestore {
              (!('totalEstimated' in data) || isValidNumber(data.totalEstimated, 0)) &&
              (!('totalActual' in data) || isValidNumber(data.totalActual, 0)) &&
              (!('notes' in data) || data.notes is string) &&
+             (!('completedAt' in data) || isValidDateString(data.completedAt)) &&
              (!('updatedAt' in data) || isValidDateString(data.updatedAt));
     }
 

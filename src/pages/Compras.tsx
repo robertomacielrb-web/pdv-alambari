@@ -53,7 +53,9 @@ import {
   exportShoppingListPDF, 
   formatShoppingListWhatsApp, 
   formatShoppingListThermal, 
-  formatCurrencyBRL 
+  formatCurrencyBRL,
+  buildWhatsAppShoppingListUrl,
+  shareShoppingListPDF
 } from '../lib/purchaseOrderPdf';
 import { thermalPrinter } from '../lib/printer';
 import { useStoreSettings } from '../contexts/StoreSettingsContext';
@@ -104,6 +106,11 @@ export default function Compras() {
   const [activeListForConference, setActiveListForConference] = useState<ShoppingList | null>(null);
   const [listToDelete, setListToDelete] = useState<ShoppingList | null>(null);
   
+  // Share / WhatsApp Modal State
+  const [shareModalList, setShareModalList] = useState<ShoppingList | null>(null);
+  const [shareModalPhone, setShareModalPhone] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+  
   // Toast notifications
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   
@@ -134,8 +141,21 @@ export default function Compras() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // 1. Fetch Shopping Lists from Firestore ('shopping_lists' and fallbacks from 'purchase_orders')
+  // 1. Fetch Shopping Lists from Firestore ('shopping_lists') with immediate local cache fallback
   useEffect(() => {
+    try {
+      const cached = localStorage.getItem('alambari_shopping_lists_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setShoppingLists(parsed);
+          setLoading(false);
+        }
+      }
+    } catch (e) {
+      console.warn('Local cache load error:', e);
+    }
+
     const listsRef = collection(db, 'shopping_lists');
     const q = query(listsRef, orderBy('createdAt', 'desc'));
 
@@ -148,6 +168,9 @@ export default function Compras() {
         });
         setShoppingLists(loaded);
         setLoading(false);
+        try {
+          localStorage.setItem('alambari_shopping_lists_cache', JSON.stringify(loaded.slice(0, 50)));
+        } catch (e) {}
       },
       (error) => {
         console.error('Error fetching shopping lists:', error);
@@ -278,16 +301,20 @@ export default function Compras() {
     const totalEst = estPrice ? Number((qty * estPrice).toFixed(2)) : undefined;
 
     const newItem: ShoppingListItem = {
-      id: `item_${Date.now()}_${Math.random()}`,
+      id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       name: trimmed,
       category: newItemCategory,
       quantity: newItemUnit === 'kg' ? Number(qty.toFixed(3)) : Math.round(qty),
       unit: newItemUnit,
-      estimatedPrice: estPrice,
-      totalEstimated: totalEst,
       checked: false,
-      notes: newItemNotes.trim() || undefined,
     };
+    if (estPrice !== undefined && estPrice > 0) {
+      newItem.estimatedPrice = estPrice;
+      newItem.totalEstimated = totalEst;
+    }
+    if (newItemNotes.trim()) {
+      newItem.notes = newItemNotes.trim();
+    }
 
     setItems((prev) => [...prev, newItem]);
     setNewItemName('');
@@ -321,21 +348,24 @@ export default function Compras() {
       const minStock = Number(p.minStock) || 5;
       const suggestedQty = Math.max(1, (minStock * 2) - currentStock);
       const unit = p.unit === 'kg' ? 'kg' : 'un';
-      const estPrice = p.costPrice || p.price || undefined;
-      const totalEst = estPrice ? Number((suggestedQty * estPrice).toFixed(2)) : undefined;
+      const estPrice = p.costPrice || p.price ? Number(p.costPrice || p.price) : 0;
+      const totalEst = estPrice > 0 ? Number((suggestedQty * estPrice).toFixed(2)) : 0;
 
-      return {
-        id: `item_low_${p.id}_${Date.now()}`,
+      const item: ShoppingListItem = {
+        id: `item_low_${p.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         productId: p.id,
         name: p.name,
         category: p.category || 'Carnes & Açougue',
         quantity: unit === 'kg' ? Number(suggestedQty.toFixed(3)) : Math.round(suggestedQty),
         unit,
-        estimatedPrice: estPrice,
-        totalEstimated: totalEst,
         checked: false,
         notes: `Estoque atual: ${currentStock} (Mín: ${minStock})`,
       };
+      if (estPrice > 0) {
+        item.estimatedPrice = estPrice;
+        item.totalEstimated = totalEst;
+      }
+      return item;
     });
 
     setItems((prev) => [...prev, ...importedItems]);
@@ -368,7 +398,72 @@ export default function Compras() {
     return items.reduce((acc, it) => acc + (it.totalEstimated || 0), 0);
   }, [items]);
 
-  // Save Shopping List to Firestore
+  // Clean items array ensuring zero undefined values for Firestore
+  const cleanShoppingItems = (rawItems: ShoppingListItem[]): ShoppingListItem[] => {
+    return (rawItems || []).map((item, idx) => {
+      const cleanItem: any = {
+        id: item.id || `item_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+        name: String(item.name || '').trim(),
+        category: String(item.category || 'Carnes & Açougue').trim(),
+        quantity: Number(item.quantity) || 1,
+        unit: String(item.unit || 'kg').trim(),
+        checked: Boolean(item.checked),
+      };
+      if (item.productId) {
+        cleanItem.productId = String(item.productId);
+      }
+      if (item.estimatedPrice !== undefined && item.estimatedPrice !== null && !isNaN(Number(item.estimatedPrice)) && Number(item.estimatedPrice) > 0) {
+        cleanItem.estimatedPrice = Number(Number(item.estimatedPrice).toFixed(2));
+      }
+      if (item.totalEstimated !== undefined && item.totalEstimated !== null && !isNaN(Number(item.totalEstimated)) && Number(item.totalEstimated) > 0) {
+        cleanItem.totalEstimated = Number(Number(item.totalEstimated).toFixed(2));
+      }
+      if (item.notes && String(item.notes).trim()) {
+        cleanItem.notes = String(item.notes).trim();
+      }
+      return cleanItem as ShoppingListItem;
+    });
+  };
+
+  // Clean document payload ensuring zero undefined values for Firestore
+  const cleanShoppingListForFirestore = (data: Partial<ShoppingList>): Record<string, any> => {
+    const cleanDoc: Record<string, any> = {
+      title: String(data.title || '').trim(),
+      items: cleanShoppingItems(data.items || []),
+      status: data.status || 'aberta',
+      totalEstimated: Number(data.totalEstimated) || 0,
+      createdAt: data.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const dest = (data.destination || data.supplierName || '').trim();
+    if (dest) {
+      cleanDoc.destination = dest;
+      cleanDoc.supplierName = dest;
+    }
+    if (data.supplierPhone && data.supplierPhone.trim()) {
+      cleanDoc.supplierPhone = data.supplierPhone.trim();
+    }
+    if (data.buyerName && data.buyerName.trim()) {
+      cleanDoc.buyerName = data.buyerName.trim();
+    }
+    if (data.targetDate && data.targetDate.trim()) {
+      cleanDoc.targetDate = data.targetDate.trim();
+    }
+    if (data.totalActual !== undefined && data.totalActual !== null && !isNaN(Number(data.totalActual)) && Number(data.totalActual) >= 0) {
+      cleanDoc.totalActual = Number(data.totalActual);
+    }
+    if (data.notes && data.notes.trim()) {
+      cleanDoc.notes = data.notes.trim();
+    }
+    if (data.completedAt && data.completedAt.trim()) {
+      cleanDoc.completedAt = data.completedAt.trim();
+    }
+
+    return cleanDoc;
+  };
+
+  // Save Shopping List to Firestore with local cache backup
   const handleSaveList = async (targetStatus?: ShoppingListStatus, andOpenWhatsApp: boolean = false) => {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
@@ -381,46 +476,84 @@ export default function Compras() {
       return;
     }
 
+    setSaving(true);
     const finalStatus: ShoppingListStatus = targetStatus || status;
 
-    const listData: Omit<ShoppingList, 'id'> = {
+    const rawData: Partial<ShoppingList> = {
       title: trimmedTitle,
-      destination: destination.trim() || undefined,
-      supplierName: destination.trim() || undefined,
-      supplierPhone: supplierPhone.trim() || undefined,
-      buyerName: buyerName.trim() || undefined,
+      destination: destination.trim(),
+      supplierName: destination.trim(),
+      supplierPhone: supplierPhone.trim(),
+      buyerName: buyerName.trim(),
       targetDate: targetDate || new Date().toISOString().split('T')[0],
       status: finalStatus,
       items,
       totalEstimated: currentTotalEstimated,
-      notes: notes.trim() || undefined,
+      notes: notes.trim(),
       createdAt: editingListId ? (shoppingLists.find((l) => l.id === editingListId)?.createdAt || new Date().toISOString()) : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
+    const cleanData = cleanShoppingListForFirestore(rawData);
+
     try {
       let savedId = editingListId;
       if (editingListId) {
-        await updateDoc(doc(db, 'shopping_lists', editingListId), listData);
+        await updateDoc(doc(db, 'shopping_lists', editingListId), cleanData);
         showToast('Lista de compras atualizada com sucesso!');
       } else {
-        const docRef = await addDoc(collection(db, 'shopping_lists'), listData);
+        const docRef = await addDoc(collection(db, 'shopping_lists'), cleanData);
         savedId = docRef.id;
-        showToast('Lista de compras criada com sucesso!');
+        showToast('Lista de compras salva com sucesso!');
       }
 
-      const completeList: ShoppingList = { id: savedId || undefined, ...listData };
+      const completeList: ShoppingList = {
+        id: savedId || `list_${Date.now()}`,
+        ...(cleanData as any),
+      };
+
+      // Backup into local cache immediately
+      try {
+        const existingCache = JSON.parse(localStorage.getItem('alambari_shopping_lists_cache') || '[]');
+        const updatedCache = [completeList, ...existingCache.filter((l: any) => l.id !== completeList.id)];
+        localStorage.setItem('alambari_shopping_lists_cache', JSON.stringify(updatedCache.slice(0, 50)));
+      } catch (cacheErr) {
+        console.warn('Cache write error:', cacheErr);
+      }
 
       if (andOpenWhatsApp) {
-        handleSendWhatsApp(completeList);
+        handleOpenShareModal(completeList);
+      } else {
+        setActiveTab('listas');
       }
 
-      setActiveTab('listas');
       resetBuilderForm();
     } catch (err: any) {
-      console.error('Error saving shopping list:', err);
-      handleFirestoreError(err, OperationType.WRITE, 'shopping_lists');
-      alert('Erro ao salvar lista de compras: ' + (err.message || 'Tente novamente.'));
+      console.error('Error saving shopping list to Firestore:', err);
+      // Fallback: save to local cache so user never loses data
+      try {
+        const fallbackId = editingListId || `local_${Date.now()}`;
+        const fallbackList: ShoppingList = {
+          id: fallbackId,
+          ...(cleanData as any),
+        };
+        const existingCache = JSON.parse(localStorage.getItem('alambari_shopping_lists_cache') || '[]');
+        const updatedCache = [fallbackList, ...existingCache.filter((l: any) => l.id !== fallbackList.id)];
+        localStorage.setItem('alambari_shopping_lists_cache', JSON.stringify(updatedCache.slice(0, 50)));
+        setShoppingLists((prev) => [fallbackList, ...prev.filter((p) => p.id !== fallbackList.id)]);
+        showToast('Lista salva no armazenamento local do dispositivo!');
+        if (andOpenWhatsApp) {
+          handleOpenShareModal(fallbackList);
+        } else {
+          setActiveTab('listas');
+        }
+        resetBuilderForm();
+      } catch (localErr) {
+        handleFirestoreError(err, OperationType.WRITE, 'shopping_lists');
+        alert('Erro ao salvar lista de compras: ' + (err.message || 'Tente novamente.'));
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -437,24 +570,30 @@ export default function Compras() {
 
     const allChecked = updatedItems.length > 0 && updatedItems.every((it) => it.checked);
     const newStatus: ShoppingListStatus = allChecked ? 'concluida' : 'em_compras';
+    const cleanItems = cleanShoppingItems(updatedItems);
+    const nowIso = new Date().toISOString();
 
     const updatedList: ShoppingList = {
       ...activeListForConference,
-      items: updatedItems,
+      items: cleanItems,
       status: newStatus,
-      updatedAt: new Date().toISOString(),
-      completedAt: allChecked ? new Date().toISOString() : undefined,
+      updatedAt: nowIso,
+      ...(allChecked ? { completedAt: nowIso } : {}),
     };
 
     setActiveListForConference(updatedList);
+    setShoppingLists((prev) => prev.map((l) => (l.id === activeListForConference.id ? updatedList : l)));
 
     try {
-      await updateDoc(doc(db, 'shopping_lists', activeListForConference.id), {
-        items: updatedItems,
+      const updatePayload: any = {
+        items: cleanItems,
         status: newStatus,
-        updatedAt: new Date().toISOString(),
-        ...(allChecked ? { completedAt: new Date().toISOString() } : {}),
-      });
+        updatedAt: nowIso,
+      };
+      if (allChecked) {
+        updatePayload.completedAt = nowIso;
+      }
+      await updateDoc(doc(db, 'shopping_lists', activeListForConference.id), updatePayload);
     } catch (err) {
       console.error('Error toggling shopping item:', err);
     }
@@ -470,47 +609,45 @@ export default function Compras() {
     }));
 
     const newStatus: ShoppingListStatus = checkAll ? 'concluida' : 'em_compras';
+    const cleanItems = cleanShoppingItems(updatedItems);
+    const nowIso = new Date().toISOString();
 
     const updatedList: ShoppingList = {
       ...activeListForConference,
-      items: updatedItems,
+      items: cleanItems,
       status: newStatus,
-      updatedAt: new Date().toISOString(),
-      ...(checkAll ? { completedAt: new Date().toISOString() } : {}),
+      updatedAt: nowIso,
+      ...(checkAll ? { completedAt: nowIso } : {}),
     };
 
     setActiveListForConference(updatedList);
+    setShoppingLists((prev) => prev.map((l) => (l.id === activeListForConference.id ? updatedList : l)));
 
     try {
-      await updateDoc(doc(db, 'shopping_lists', activeListForConference.id), {
-        items: updatedItems,
+      const updatePayload: any = {
+        items: cleanItems,
         status: newStatus,
-        updatedAt: new Date().toISOString(),
-        ...(checkAll ? { completedAt: new Date().toISOString() } : {}),
-      });
+        updatedAt: nowIso,
+      };
+      if (checkAll) {
+        updatePayload.completedAt = nowIso;
+      }
+      await updateDoc(doc(db, 'shopping_lists', activeListForConference.id), updatePayload);
       showToast(checkAll ? 'Todos os itens marcados como conferidos!' : 'Itens desmarcados.');
     } catch (err) {
       console.error('Error bulk updating shopping items:', err);
     }
   };
 
-  // Send WhatsApp with PDF Download & Text
+  // Open the dedicated WhatsApp & PDF Sharing Modal
+  const handleOpenShareModal = (list: ShoppingList) => {
+    setShareModalList(list);
+    setShareModalPhone(list.supplierPhone || '');
+  };
+
+  // Send WhatsApp triggers the modal so it works on every browser/device
   const handleSendWhatsApp = (list: ShoppingList) => {
-    // 1. Download PDF automatically for the user to attach
-    exportShoppingListPDF(list, { storeName, whatsappNumber });
-
-    // 2. Open WhatsApp with formatted text
-    const text = formatShoppingListWhatsApp(list, { storeName, whatsappNumber });
-    const encoded = encodeURIComponent(text);
-    const cleanPhone = (list.supplierPhone || '').replace(/\D/g, '');
-
-    const url = cleanPhone
-      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`
-      : `https://api.whatsapp.com/send?text=${encoded}`;
-
-    window.open(url, '_blank');
-
-    showToast('PDF da Lista baixado e WhatsApp aberto! Basta anexar o arquivo na conversa.');
+    handleOpenShareModal(list);
   };
 
   // Export PDF directly
@@ -1427,18 +1564,20 @@ export default function Compras() {
                 <div className="space-y-2 pt-2 border-t border-gray-100">
                   <button
                     onClick={() => handleSaveList(undefined, false)}
-                    className="w-full bg-gray-900 hover:bg-black text-white font-black py-3 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
+                    disabled={saving}
+                    className="w-full bg-gray-900 hover:bg-black text-white font-black py-3.5 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-50 active:scale-98"
                   >
-                    <Check className="w-4 h-4" />
-                    <span>Salvar Lista de Compras</span>
+                    {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    <span>{saving ? 'Salvando Lista...' : 'Salvar Lista de Compras'}</span>
                   </button>
 
                   <button
                     onClick={() => handleSaveList('em_compras', true)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-sm cursor-pointer active:scale-98"
+                    disabled={saving}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3.5 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-sm cursor-pointer active:scale-98 disabled:opacity-50"
                   >
-                    <Send className="w-4 h-4" />
-                    <span>Salvar e Enviar no WhatsApp (PDF + Texto)</span>
+                    {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    <span>{saving ? 'Salvando Lista...' : 'Salvar e Enviar no WhatsApp (PDF + Texto)'}</span>
                   </button>
                 </div>
               </div>
@@ -1724,6 +1863,164 @@ export default function Compras() {
               >
                 Excluir Lista
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share / WhatsApp & PDF Modal */}
+      {shareModalList && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 space-y-5 animate-[fadeIn_0.2s_ease-out]">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-emerald-50 text-emerald-700 rounded-2xl border border-emerald-100">
+                  <Send className="w-6 h-6" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                    Envio WhatsApp & PDF
+                  </span>
+                  <h3 className="text-xl font-black text-gray-900 mt-1">
+                    Enviar Lista de Compras
+                  </h3>
+                </div>
+              </div>
+              <button
+                onClick={() => setShareModalList(null)}
+                className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* List Details Card */}
+            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-gray-500">Lista:</span>
+                <span className="font-black text-gray-900 truncate max-w-[240px]">
+                  {shareModalList.title}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-gray-500">Destino / Local:</span>
+                <span className="font-bold text-gray-700">
+                  {shareModalList.destination || shareModalList.supplierName || 'Mercado Geral'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-gray-500">Total de Itens:</span>
+                <span className="font-black text-gray-900">
+                  {shareModalList.items?.length || 0} itens cadastrados
+                </span>
+              </div>
+              {shareModalList.totalEstimated > 0 && (
+                <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                  <span className="font-bold text-gray-500">Estimativa Total:</span>
+                  <span className="font-black text-red-600 text-sm">
+                    {formatCurrencyBRL(shareModalList.totalEstimated)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Phone Input */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                <span>WhatsApp de Envio (com DDD)</span>
+                <span className="text-[11px] font-normal text-gray-400">Opcional</span>
+              </label>
+              <div className="relative">
+                <Phone className="w-4 h-4 text-emerald-600 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="tel"
+                  placeholder="Ex: 11999999999 (ou deixe em branco para escolher no WhatsApp)"
+                  value={shareModalPhone}
+                  onChange={(e) => setShareModalPhone(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2.5 pt-1">
+              {/* Primary: Direct WhatsApp link that can NEVER be blocked */}
+              <a
+                href={buildWhatsAppShoppingListUrl(shareModalList, { storeName, whatsappNumber }, shareModalPhone)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  exportShoppingListPDF(shareModalList, { storeName, whatsappNumber });
+                  showToast('PDF baixado e WhatsApp aberto!');
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-black py-3.5 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2.5 text-sm sm:text-base cursor-pointer"
+              >
+                <Send className="w-5 h-5" />
+                <span>Abrir Conversa no WhatsApp (Baixa PDF Junto)</span>
+              </a>
+
+              {/* Web Share API: Send PDF directly via tablet/phone native share */}
+              {typeof navigator !== 'undefined' && 'share' in navigator && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const shared = await shareShoppingListPDF(shareModalList, { storeName, whatsappNumber });
+                    if (shared) {
+                      showToast('Lista compartilhada com sucesso!');
+                    } else {
+                      exportShoppingListPDF(shareModalList, { storeName, whatsappNumber });
+                      showToast('PDF da lista de compras baixado!');
+                    }
+                  }}
+                  className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold py-3 px-4 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>Compartilhar Arquivo PDF Direto (Tablet/Celular)</span>
+                </button>
+              )}
+
+              {/* Secondary Grid: Download PDF & Copy Text */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleExportPDF(shareModalList)}
+                  className="w-full bg-gray-100 hover:bg-gray-200 active:scale-98 text-gray-800 font-bold py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-gray-600" />
+                  <span>Baixar PDF A4</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCopyMessage(shareModalList)}
+                  className="w-full bg-gray-100 hover:bg-gray-200 active:scale-98 text-gray-800 font-bold py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+                >
+                  <Copy className="w-4 h-4 text-gray-600" />
+                  <span>Copiar Mensagem</span>
+                </button>
+              </div>
+
+              {/* Thermal Slip */}
+              <button
+                type="button"
+                onClick={() => handlePrintThermal(shareModalList)}
+                className="w-full bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold py-2.5 px-3 rounded-xl transition-all flex items-center justify-center gap-2 text-xs cursor-pointer"
+              >
+                <Printer className="w-4 h-4 text-amber-700" />
+                <span>Imprimir Cupom Térmico (80mm)</span>
+              </button>
+            </div>
+
+            {/* Explanatory helper box */}
+            <div className="bg-emerald-50/70 border border-emerald-200/60 rounded-2xl p-3.5 text-[11px] text-emerald-900 space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                Dica prática:
+              </p>
+              <p className="text-emerald-800 leading-relaxed">
+                Ao clicar no botão verde do WhatsApp, a mensagem com todos os itens organizados por categoria e caixas de marcação será carregada automaticamente. O arquivo PDF oficial da lista também será baixado para você anexar na conversa se desejar!
+              </p>
             </div>
           </div>
         </div>

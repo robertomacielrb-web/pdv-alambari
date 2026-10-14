@@ -813,3 +813,60 @@ export function formatShoppingListThermal(
 
   return text;
 }
+
+/**
+ * Builds the official universal WhatsApp URL (wa.me) with phone auto-formatting for Brazil (+55).
+ */
+export function buildWhatsAppShoppingListUrl(
+  list: ShoppingList,
+  storeSettings?: PurchaseStoreSettings,
+  overridePhone?: string
+): string {
+  const text = formatShoppingListWhatsApp(list, storeSettings);
+  const rawPhone = (overridePhone !== undefined ? overridePhone : (list.supplierPhone || '')).replace(/\D/g, '');
+  
+  let formattedPhone = '';
+  if (rawPhone.length === 10 || rawPhone.length === 11) {
+    formattedPhone = `55${rawPhone}`;
+  } else if (rawPhone.length >= 12) {
+    formattedPhone = rawPhone;
+  }
+
+  const encoded = encodeURIComponent(text);
+  if (formattedPhone) {
+    return `https://wa.me/${formattedPhone}?text=${encoded}`;
+  }
+  return `https://wa.me/?text=${encoded}`;
+}
+
+/**
+ * Shares the PDF directly using Web Share API (native share sheet on tablets and mobile).
+ */
+export async function shareShoppingListPDF(
+  list: ShoppingList,
+  storeSettings?: PurchaseStoreSettings
+): Promise<boolean> {
+  try {
+    const doc = generateShoppingListPDF(list, storeSettings);
+    const pdfBlob = doc.output('blob');
+    const cleanTitle = (list.title || 'Lista_de_Compras').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const fileName = `Lista_Compras_${cleanTitle}.pdf`;
+    
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: list.title || 'Lista de Compras',
+          text: `Lista de compras - ${storeSettings?.storeName || 'Alambari Defumados'}`,
+          files: [file],
+        });
+        return true;
+      }
+    }
+  } catch (err: any) {
+    if (err?.name !== 'AbortError') {
+      console.warn('Share API error:', err);
+    }
+  }
+  return false;
+}

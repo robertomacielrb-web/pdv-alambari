@@ -181,7 +181,7 @@ export default function Layout() {
                 className={({ isActive }) => cn(
                   "group flex items-center transition-all duration-200 rounded-xl",
                   isSidebarCollapsed 
-                    ? "justify-center px-2 py-3 mx-1" 
+                    ? "justify-center flex-col py-2 px-1 mx-1 gap-1 text-center" 
                     : "px-3 py-2.5 my-0.5 text-sm font-medium border-l-4 rounded-r-lg mr-2",
                   isActive 
                     ? (isSidebarCollapsed ? "bg-red-600 text-white shadow-md shadow-red-950/40" : "bg-gray-800/80 border-red-500 text-white") 
@@ -198,7 +198,11 @@ export default function Layout() {
                         ? (isSidebarCollapsed ? "text-white" : "text-red-400") 
                         : "text-gray-400 group-hover:text-gray-200"
                     )} />
-                    {!isSidebarCollapsed && (
+                    {isSidebarCollapsed ? (
+                      <span className="text-[9px] font-bold leading-none truncate max-w-[66px]">
+                        {item.name.startsWith('Eventos') ? 'Eventos' : item.name.split(' ')[0]}
+                      </span>
+                    ) : (
                       <>
                         <span className="flex-1 text-left">{item.name}</span>
                         {item.href === '/' && isCashierAuthRequired && (
@@ -327,7 +331,7 @@ export default function Layout() {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto bg-gray-50 flex flex-col min-w-0">
+      <main className="flex-1 overflow-y-auto bg-gray-50 flex flex-col min-w-0 pb-20 md:pb-0">
         {/* Permission Request Prompt Banner */}
         <NotificationPermissionBanner />
 
@@ -335,6 +339,65 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+
+      {/* Tablet & Mobile Quick Bottom Dock */}
+      <nav 
+        aria-label="Acesso rápido para tablet e celular"
+        className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-t border-gray-800 text-white z-40 px-2 py-1.5 flex items-center justify-around shadow-2xl select-none"
+      >
+        <NavLink
+          to="/"
+          className={({ isActive }) => cn(
+            "flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all min-w-[62px] active:scale-95",
+            isActive ? "text-red-400 bg-gray-800/90 font-bold" : "text-gray-400 hover:text-gray-200"
+          )}
+        >
+          <Calculator className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] tracking-tight leading-none font-bold">Caixa</span>
+        </NavLink>
+
+        <NavLink
+          to="/balcao"
+          className={({ isActive }) => cn(
+            "flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all min-w-[62px] active:scale-95",
+            isActive ? "text-red-400 bg-gray-800/90 font-bold" : "text-gray-400 hover:text-gray-200"
+          )}
+        >
+          <Store className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] tracking-tight leading-none font-bold">Balcão</span>
+        </NavLink>
+
+        <NavLink
+          to="/mesas"
+          className={({ isActive }) => cn(
+            "flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all min-w-[62px] active:scale-95",
+            isActive ? "text-red-400 bg-gray-800/90 font-bold" : "text-gray-400 hover:text-gray-200"
+          )}
+        >
+          <Coffee className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] tracking-tight leading-none font-bold">Mesas</span>
+        </NavLink>
+
+        <NavLink
+          to="/delivery"
+          className={({ isActive }) => cn(
+            "flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all min-w-[62px] active:scale-95",
+            isActive ? "text-red-400 bg-gray-800/90 font-bold" : "text-gray-400 hover:text-gray-200"
+          )}
+        >
+          <Truck className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] tracking-tight leading-none font-bold">Delivery</span>
+        </NavLink>
+
+        <button
+          onClick={() => setIsMobileMenuOpen(true)}
+          className="flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all min-w-[62px] text-gray-400 hover:text-gray-200 active:scale-95 cursor-pointer"
+          title="Ver todos os módulos e configurações"
+        >
+          <Menu className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] tracking-tight leading-none font-bold">Mais</span>
+        </button>
+      </nav>
 
       {/* Real-time Toasts & Settings Modal */}
       <NotificationToastContainer />

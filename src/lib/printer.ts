@@ -194,6 +194,97 @@ export class BluetoothPrinter {
 
 export const thermalPrinter = new BluetoothPrinter();
 
+// Standard ESC/POS Control Codes
+export const ESC_POS = {
+  RESET: '\x1B@',
+  ALIGN_LEFT: '\x1Ba\x00',
+  ALIGN_CENTER: '\x1Ba\x01',
+  ALIGN_RIGHT: '\x1Ba\x02',
+  BOLD_ON: '\x1BE\x01',
+  BOLD_OFF: '\x1BE\x00',
+  // ESC ! n: bit 3 = bold (8), bit 4 = double height (16), bit 5 = double width (32) => 0x38 (56)
+  DOUBLE_SIZE_BOLD: '\x1B!\x38',
+  DOUBLE_HEIGHT: '\x1B!\x10',
+  DOUBLE_WIDTH: '\x1B!\x20',
+  NORMAL: '\x1B!\x00',
+};
+
+/**
+ * Formata o número da senha para exibição com destaque (preenche com zeros se numérico < 100, ex: 042)
+ */
+export function formatPasswordDisplay(pwd: any): string {
+  if (pwd === undefined || pwd === null || pwd === '') return '';
+  const str = String(pwd).trim();
+  const num = parseInt(str, 10);
+  if (!isNaN(num) && num > 0 && num < 100 && !str.startsWith('0')) {
+    return str.padStart(3, '0');
+  }
+  return str;
+}
+
+/**
+ * Bloco com destaque visual máximo para a Senha na VIA DO CLIENTE (impressão térmica Bluetooth)
+ */
+export function formatCustomerSenhaHighlight(password?: any, tableNumber?: any): string {
+  const pwdStr = formatPasswordDisplay(password);
+  const tableStr = tableNumber ? String(tableNumber).trim() : '';
+
+  if (!pwdStr && !tableStr) return '';
+
+  let block = '';
+  block += `${ESC_POS.ALIGN_CENTER}`;
+  block += `================================\n`;
+
+  if (pwdStr) {
+    block += `${ESC_POS.BOLD_ON}      >>> SUA SENHA <<<         \n${ESC_POS.BOLD_OFF}`;
+    block += `--------------------------------\n`;
+    block += `${ESC_POS.DOUBLE_SIZE_BOLD}SENHA: ${pwdStr}${ESC_POS.NORMAL}\n`;
+    block += `--------------------------------\n`;
+  }
+
+  if (tableStr) {
+    block += `${ESC_POS.BOLD_ON}           MESA ${tableStr}           \n${ESC_POS.BOLD_OFF}`;
+  }
+
+  block += `================================\n`;
+  block += `${ESC_POS.ALIGN_LEFT}`;
+  return block;
+}
+
+/**
+ * Bloco com destaque visual máximo para a Senha e Mesa na VIA DA PRODUÇÃO / COZINHA
+ */
+export function formatProductionSenhaHighlight(password?: any, tableNumber?: any, orderType?: string): string {
+  const pwdStr = formatPasswordDisplay(password);
+  const tableStr = tableNumber ? String(tableNumber).trim() : '';
+  const typeStr = orderType === 'delivery' ? 'DELIVERY' : orderType === 'mesa' ? 'MESA' : 'BALCAO';
+
+  let block = '';
+  block += `${ESC_POS.ALIGN_CENTER}`;
+  block += `################################\n`;
+  block += `################################\n`;
+  block += `${ESC_POS.BOLD_ON}   *** CONTROLE DE PEDIDO ***   \n${ESC_POS.BOLD_OFF}`;
+  block += `--------------------------------\n`;
+
+  if (pwdStr) {
+    block += `${ESC_POS.DOUBLE_SIZE_BOLD}SENHA: ${pwdStr}${ESC_POS.NORMAL}\n`;
+  }
+
+  if (tableStr) {
+    block += `${ESC_POS.DOUBLE_SIZE_BOLD}MESA: ${tableStr}${ESC_POS.NORMAL}\n`;
+  }
+
+  if (!pwdStr && !tableStr) {
+    block += `${ESC_POS.DOUBLE_SIZE_BOLD}${typeStr}${ESC_POS.NORMAL}\n`;
+  }
+
+  block += `--------------------------------\n`;
+  block += `################################\n`;
+  block += `################################\n`;
+  block += `${ESC_POS.ALIGN_LEFT}`;
+  return block;
+}
+
 /**
  * Formatação do relatório de Fechamento de Caixa
  */
@@ -224,7 +315,7 @@ export function formatCashierReportText(order: any): string {
 }
 
 /**
- * Formata a VIA DO CLIENTE com cabeçalho oficial, itens, subtotais e pagamento
+ * Formata a VIA DO CLIENTE com cabeçalho oficial, destaque da senha, itens, subtotais e pagamento
  */
 export function formatCustomerReceiptText(order: any): string {
   let text = `================================\n`;
@@ -236,12 +327,11 @@ export function formatCustomerReceiptText(order: any): string {
   const dateStr = new Date(date).toLocaleString('pt-BR');
   text += `Data: ${dateStr}\n`;
 
-  if (order.password) {
-    text += `SENHA: ${order.password}\n`;
+  // DESTAQUE DA SENHA / MESA
+  if (order.password || order.tableNumber) {
+    text += formatCustomerSenhaHighlight(order.password, order.tableNumber);
   }
-  if (order.tableNumber) {
-    text += `MESA: ${order.tableNumber}\n`;
-  }
+
   if (order.type) {
     const tipoLabel = order.type === 'delivery' ? 'ENTREGA / DELIVERY' : order.type === 'mesa' ? 'MESA' : 'BALCAO';
     text += `TIPO: ${tipoLabel}\n`;
@@ -307,6 +397,13 @@ export function formatCustomerReceiptText(order: any): string {
     text += `--------------------------------\n`;
   }
 
+  if (order.password) {
+    const pwdFormatted = formatPasswordDisplay(order.password);
+    text += `   Acompanhe o painel com sua   \n`;
+    text += `            SENHA ${pwdFormatted}         \n`;
+    text += `--------------------------------\n`;
+  }
+
   text += `    Obrigado pela preferencia!  \n`;
   text += `================================\n`;
   text += `  --- DESTAQUE AQUI (CORTE) --- \n`;
@@ -316,7 +413,7 @@ export function formatCustomerReceiptText(order: any): string {
 }
 
 /**
- * Formata a VIA DA PRODUÇÃO (COZINHA/CHURRASQUEIRA) com senha grande, itens e observações
+ * Formata a VIA DA PRODUÇÃO (COZINHA/CHURRASQUEIRA) com senha grande destacada, itens e observações
  */
 export function formatProductionReceiptText(order: any): string {
   let text = `================================\n`;
@@ -329,12 +426,9 @@ export function formatProductionReceiptText(order: any): string {
   text += `DATA: ${dateStr}\n`;
   text += `================================\n`;
 
-  if (order.password) {
-    text += `>>> SENHA: ${order.password} <<<\n`;
-  }
-  if (order.tableNumber) {
-    text += `>>> MESA: ${order.tableNumber} <<<\n`;
-  }
+  // DESTAQUE MAXIMO DA SENHA / MESA NA PRODUCAO
+  text += formatProductionSenhaHighlight(order.password, order.tableNumber, order.type);
+
   if (order.type) {
     const tipoLabel = order.type === 'delivery' ? 'ENTREGA / DELIVERY' : order.type === 'mesa' ? 'MESA' : 'BALCAO';
     text += `TIPO: ${tipoLabel}\n`;

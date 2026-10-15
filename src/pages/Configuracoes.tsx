@@ -38,7 +38,7 @@ import {
   Monitor,
   Receipt
 } from 'lucide-react';
-import { thermalPrinter } from '../lib/printer';
+import { thermalPrinter, formatCustomerSenhaHighlight } from '../lib/printer';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -301,9 +301,11 @@ export default function Configuracoes() {
         '================================\n' +
         'Status: Conexao Bluetooth OK\n' +
         `Data:   ${new Date().toLocaleString('pt-BR')}\n` +
+        formatCustomerSenhaHighlight('042') +
+        '   Destaque Senha Grande OK!    \n' +
         '================================\n'
       );
-      alert('Página de teste simples enviada para a impressora!');
+      alert('Página de teste simples com destaque de senha enviada para a impressora!');
     } catch (error: any) {
       alert('Erro ao imprimir: ' + error.message);
     }

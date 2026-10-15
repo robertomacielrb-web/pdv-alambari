@@ -15,7 +15,9 @@ import {
   Filter, 
   DollarSign, 
   Package,
-  Scale
+  Scale,
+  Save,
+  Loader2
 } from 'lucide-react';
 
 interface Product {
@@ -36,6 +38,7 @@ export default function Produtos() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({ name: '', price: '', costPrice: '', wholesalePrice: '', category: '', stock: '', unit: 'unidade', erpOnly: false });
+  const [isSaving, setIsSaving] = useState(false);
   const [isNewCategory, setIsNewCategory] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -129,37 +132,60 @@ export default function Produtos() {
     return Object.values(groupedProducts).reduce((sum, list) => sum + list.length, 0);
   }, [groupedProducts]);
 
+  const parsePriceInput = (val: string): number => {
+    if (!val) return NaN;
+    let clean = val.replace(/[R$\s]/g, '').trim();
+    if (clean.includes('.') && clean.includes(',')) {
+      clean = clean.replace(/\./g, '').replace(',', '.');
+    } else if (clean.includes(',')) {
+      clean = clean.replace(',', '.');
+    }
+    return parseFloat(clean);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSaving) return;
+
     try {
-      const price = parseFloat(formData.price.replace(',', '.'));
+      setIsSaving(true);
+      const price = parsePriceInput(formData.price);
       if (isNaN(price) || price < 0) {
-        alert("Preço inválido");
+        alert("Preço de venda inválido. Por favor, digite um valor numérico válido (ex: 45,90 ou 45.90).");
+        setIsSaving(false);
         return;
       }
 
       let costPriceVal: number | undefined = undefined;
       if (formData.costPrice.trim() !== '') {
-        costPriceVal = parseFloat(formData.costPrice.replace(',', '.'));
+        costPriceVal = parsePriceInput(formData.costPrice);
         if (isNaN(costPriceVal) || costPriceVal < 0) {
-          alert("Preço de custo inválido");
+          alert("Preço de custo inválido.");
+          setIsSaving(false);
           return;
         }
       }
 
       let wholesalePriceVal: number | undefined = undefined;
       if (formData.wholesalePrice.trim() !== '') {
-        wholesalePriceVal = parseFloat(formData.wholesalePrice.replace(',', '.'));
+        wholesalePriceVal = parsePriceInput(formData.wholesalePrice);
         if (isNaN(wholesalePriceVal) || wholesalePriceVal < 0) {
-          alert("Preço de atacado inválido");
+          alert("Preço de atacado inválido.");
+          setIsSaving(false);
           return;
         }
       }
       
-      const stockVal = formData.stock !== '' ? parseInt(formData.stock, 10) : undefined;
-      if (stockVal !== undefined && (isNaN(stockVal) || stockVal < 0)) {
-        alert("Estoque inválido");
-        return;
+      let stockVal: number | undefined = undefined;
+      if (formData.stock.trim() !== '') {
+        stockVal = formData.unit === 'kg' 
+          ? parsePriceInput(formData.stock) 
+          : parseInt(formData.stock, 10);
+        if (isNaN(stockVal) || stockVal < 0) {
+          alert("Estoque informado é inválido.");
+          setIsSaving(false);
+          return;
+        }
       }
 
       const productData = {
@@ -174,7 +200,8 @@ export default function Produtos() {
       };
 
       if (!productData.name || !productData.category) {
-        alert("Nome e categoria são obrigatórios");
+        alert("Nome e categoria são obrigatórios.");
+        setIsSaving(false);
         return;
       }
 
@@ -193,6 +220,8 @@ export default function Produtos() {
     } catch (error: any) {
       alert("Erro ao salvar produto: verifique os dados e tente novamente.");
       handleFirestoreError(error, editingProduct ? OperationType.UPDATE : OperationType.CREATE, 'products');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -664,34 +693,56 @@ export default function Produtos() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">{editingProduct ? 'Editar Produto' : 'Novo Produto'}</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl flex flex-col max-h-[90vh] my-auto overflow-hidden border border-gray-100 animate-fadeIn">
+            {/* Cabeçalho Fixo */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl ${editingProduct ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                  {editingProduct ? <Edit2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900 leading-tight">
+                    {editingProduct ? 'Editar Produto' : 'Novo Produto'}
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    {editingProduct ? `Alterando dados de "${editingProduct.name}"` : 'Preencha as informações do produto'}
+                  </p>
+                </div>
+              </div>
               <button 
                 onClick={closeModal} 
-                className="text-gray-500 hover:text-gray-700"
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                 type="button"
+                title="Fechar"
               >
-                <X className="w-6 h-6" />
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4">
+
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Corpo com barra de rolagem dedicada e visível */}
+              <div className="px-6 py-5 overflow-y-auto flex-1 space-y-4 focus:outline-hidden">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Nome</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Nome do Produto <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border"
+                    placeholder="Ex: Costela Bovina Defumada"
+                    className="block w-full rounded-xl border-gray-300 shadow-xs focus:border-red-500 focus:ring-red-500 p-2.5 border text-sm"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Categoria</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Categoria <span className="text-red-500">*</span>
+                  </label>
                   {(!isNewCategory && Object.keys(groupedProducts).length > 0) ? (
-                    <div className="mt-1 flex space-x-2">
+                    <div className="flex space-x-2">
                       <select
                         value={formData.category}
                         onChange={(e) => {
@@ -703,7 +754,7 @@ export default function Produtos() {
                           }
                         }}
                         required
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border bg-white"
+                        className="block w-full rounded-xl border-gray-300 shadow-xs focus:border-red-500 focus:ring-red-500 p-2.5 border bg-white text-sm"
                       >
                         <option value="" disabled>Selecione uma categoria...</option>
                         {Object.keys(groupedProducts).sort().map((cat) => (
@@ -713,13 +764,13 @@ export default function Produtos() {
                       </select>
                     </div>
                   ) : (
-                    <div className="mt-1 flex space-x-2 items-center">
+                    <div className="flex space-x-2 items-center">
                       <input
                         type="text"
                         required
                         value={formData.category}
                         onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border"
+                        className="block w-full rounded-xl border-gray-300 shadow-xs focus:border-red-500 focus:ring-red-500 p-2.5 border text-sm"
                         placeholder="Digite o nome da nova categoria"
                         autoFocus
                       />
@@ -730,7 +781,7 @@ export default function Produtos() {
                             setIsNewCategory(false);
                             setFormData({ ...formData, category: Object.keys(groupedProducts).sort()[0] || '' });
                           }}
-                          className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-100"
+                          className="px-3.5 py-2.5 text-xs font-semibold text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-100 transition-colors shrink-0"
                         >
                           Voltar
                         </button>
@@ -738,6 +789,7 @@ export default function Produtos() {
                     </div>
                   )}
                 </div>
+
                 {/* Tipo de Cobrança / Unidade de Medida */}
                 <div className="bg-gray-50/90 p-3.5 rounded-xl border border-gray-200">
                   <label className="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">
@@ -749,7 +801,7 @@ export default function Produtos() {
                       onClick={() => setFormData({ ...formData, unit: 'unidade' })}
                       className={`p-3 rounded-xl border-2 font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
                         formData.unit === 'unidade'
-                          ? 'bg-white border-red-600 text-red-700 shadow-sm ring-1 ring-red-600'
+                          ? 'bg-white border-red-600 text-red-700 shadow-xs ring-1 ring-red-600'
                           : 'bg-white/60 border-gray-200 text-gray-600 hover:border-gray-300'
                       }`}
                     >
@@ -765,7 +817,7 @@ export default function Produtos() {
                       onClick={() => setFormData({ ...formData, unit: 'kg' })}
                       className={`p-3 rounded-xl border-2 font-bold text-xs flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
                         formData.unit === 'kg'
-                          ? 'bg-amber-50 border-amber-600 text-amber-900 shadow-sm ring-1 ring-amber-600'
+                          ? 'bg-amber-50 border-amber-600 text-amber-900 shadow-xs ring-1 ring-amber-600'
                           : 'bg-white/60 border-gray-200 text-gray-600 hover:border-gray-300'
                       }`}
                     >
@@ -778,7 +830,7 @@ export default function Produtos() {
                   </div>
 
                   {formData.unit === 'kg' && (
-                    <div className="mt-3 bg-amber-100/90 border border-amber-300 text-amber-900 rounded-lg p-2.5 text-xs flex items-start gap-2 animate-fadeIn">
+                    <div className="mt-3 bg-amber-100/90 border border-amber-300 text-amber-900 rounded-lg p-2.5 text-xs flex items-start gap-2">
                       <Scale className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                       <div>
                         <strong className="block font-bold">Cobrança por Quilo / Balança ativada</strong>
@@ -790,77 +842,104 @@ export default function Produtos() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      {formData.unit === 'kg' ? 'Preço Varejo por Kg (R$/kg)' : 'Preço Varejo (R$)'}
+                {/* Preços */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-red-50/40 p-3.5 rounded-xl border border-red-200/80">
+                    <label className="block text-xs font-bold text-red-950 mb-1">
+                      {formData.unit === 'kg' ? 'Preço Varejo por Kg (R$/kg) *' : 'Preço Varejo (R$) *'}
                     </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.price}
-                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                      placeholder="0.00"
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border font-bold"
-                    />
-                    {formData.unit === 'kg' && (
-                      <span className="text-[11px] text-amber-700 font-semibold block mt-1">Ex: R$ 89,90 por quilo</span>
+                    <div className="relative mt-1">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-xs font-bold text-gray-500">
+                        R$
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        value={formData.price}
+                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                        placeholder="0,00"
+                        className="block w-full pl-9 pr-3 py-2.5 rounded-lg border-gray-300 shadow-xs focus:border-red-500 focus:ring-red-500 border font-bold text-base bg-white"
+                      />
+                    </div>
+                    {formData.unit === 'kg' ? (
+                      <span className="text-[11px] text-amber-800 font-semibold block mt-1">Ex: 89,90 por quilo</span>
+                    ) : (
+                      <span className="text-[11px] text-gray-500 block mt-1">Ex: 28,00 ou 28.00</span>
                     )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
+
+                  <div className="bg-gray-50/70 p-3.5 rounded-xl border border-gray-200">
+                    <label className="block text-xs font-bold text-gray-700 mb-1">
                       {formData.unit === 'kg' ? 'Preço Atacado por Kg (R$/kg)' : 'Preço Atacado (R$)'}
                     </label>
-                    <input
-                      type="text"
-                      value={formData.wholesalePrice}
-                      onChange={(e) => setFormData({ ...formData, wholesalePrice: e.target.value })}
-                      placeholder="0.00 (opcional)"
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border"
-                    />
+                    <div className="relative mt-1">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-xs font-bold text-gray-500">
+                        R$
+                      </span>
+                      <input
+                        type="text"
+                        value={formData.wholesalePrice}
+                        onChange={(e) => setFormData({ ...formData, wholesalePrice: e.target.value })}
+                        placeholder="0,00 (opcional)"
+                        className="block w-full pl-9 pr-3 py-2.5 rounded-lg border-gray-300 shadow-xs focus:border-red-500 focus:ring-red-500 border text-sm bg-white"
+                      />
+                    </div>
+                    <span className="text-[11px] text-gray-400 block mt-1">Opcional para pedidos de atacado</span>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    {formData.unit === 'kg' ? 'Preço de Custo por Kg (R$/kg)' : 'Preço de Custo (R$)'}
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.costPrice}
-                    onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
-                    placeholder="0.00"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Opcional, usado para cálculo de CMV no Fluxo de Caixa</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      {formData.unit === 'kg' ? 'Preço de Custo por Kg (R$/kg)' : 'Preço de Custo (R$)'}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-xs font-bold text-gray-400">
+                        R$
+                      </span>
+                      <input
+                        type="text"
+                        value={formData.costPrice}
+                        onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
+                        placeholder="0,00"
+                        className="block w-full pl-9 pr-3 py-2 rounded-lg border-gray-300 shadow-xs focus:border-red-500 focus:ring-red-500 border text-sm"
+                      />
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1">Usado para cálculo de CMV no Fluxo de Caixa</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                      {formData.unit === 'kg' ? 'Estoque em Quilos (kg)' : 'Estoque (Unidades)'}
+                    </label>
+                    <input
+                      type="number"
+                      step={formData.unit === 'kg' ? "0.01" : "1"}
+                      value={formData.stock}
+                      onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                      placeholder="Deixar em branco = livre"
+                      className="block w-full px-3 py-2 rounded-lg border-gray-300 shadow-xs focus:border-red-500 focus:ring-red-500 border text-sm"
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1">Controle de estoque opcional</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    {formData.unit === 'kg' ? 'Estoque Opcional em Quilos (kg)' : 'Estoque Opcional (Quant. un)'}
-                  </label>
-                  <input
-                    type="number"
-                    step={formData.unit === 'kg' ? "0.01" : "1"}
-                    value={formData.stock}
-                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                    placeholder="Deixe em branco p/ não controlar"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border"
-                  />
-                </div>
-                <div className="flex items-center mt-4">
+
+                <div className="flex items-center pt-2">
                   <input
                     id="erpOnly"
                     type="checkbox"
                     checked={formData.erpOnly}
                     onChange={(e) => setFormData({ ...formData, erpOnly: e.target.checked })}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
                   />
-                  <label htmlFor="erpOnly" className="ml-2 block text-sm font-medium text-gray-700">
+                  <label htmlFor="erpOnly" className="ml-2.5 block text-xs font-semibold text-gray-700 cursor-pointer">
                     Exibir este produto SOMENTE no ERP (Atacado)
                   </label>
                 </div>
               </div>
-              <div className="mt-6 flex justify-between items-center">
+
+              {/* Rodapé Fixo / Sticky: SEMPRE VISÍVEL para salvar com facilidade */}
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-3 shrink-0">
                 {editingProduct ? (
                   <button
                     type="button"
@@ -868,26 +947,39 @@ export default function Produtos() {
                       handleDelete(editingProduct.id);
                       closeModal();
                     }}
-                    className="px-4 py-2 text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-md font-medium transition-colors"
+                    className="px-3.5 py-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-lg font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
-                    Excluir Produto
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Excluir</span>
                   </button>
                 ) : (
-                  <div></div>
+                  <div />
                 )}
-                <div className="flex space-x-3">
+
+                <div className="flex items-center space-x-2.5">
                   <button
                     type="button"
                     onClick={closeModal}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 shadow-sm transition-colors"
+                    disabled={isSaving}
+                    className="px-5 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-lg text-sm font-bold shadow-sm hover:shadow transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Salvar
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Salvando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Salvar Produto</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

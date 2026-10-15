@@ -35,7 +35,8 @@ import {
   X,
   Maximize2,
   Minimize2,
-  Monitor
+  Monitor,
+  Receipt
 } from 'lucide-react';
 import { thermalPrinter } from '../lib/printer';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
@@ -57,6 +58,8 @@ export default function Configuracoes() {
   } = useFullscreen();
 
   const [printMode, setPrintMode] = useState<'browser' | 'bluetooth'>('browser');
+  const [printCopiesCustomer, setPrintCopiesCustomer] = useState(true);
+  const [printCopiesProduction, setPrintCopiesProduction] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -118,6 +121,15 @@ export default function Configuracoes() {
     const savedMode = localStorage.getItem('printMode') as 'browser' | 'bluetooth';
     if (savedMode) {
       setPrintMode(savedMode);
+    }
+
+    const savedCustomer = localStorage.getItem('printCopiesCustomer');
+    if (savedCustomer !== null) {
+      setPrintCopiesCustomer(savedCustomer !== 'false');
+    }
+    const savedProduction = localStorage.getItem('printCopiesProduction');
+    if (savedProduction !== null) {
+      setPrintCopiesProduction(savedProduction !== 'false');
     }
     
     // Load store settings
@@ -282,9 +294,50 @@ export default function Configuracoes() {
     }
 
     try {
-      await thermalPrinter.print('*** TESTE DE IMPRESSAO ***\nPDV ALAMBARI DEFUMADOS\nImpressora Bluetooth conectada com sucesso!\n');
+      await thermalPrinter.print(
+        '================================\n' +
+        '     TESTE RAPIDO IMPRESSORA    \n' +
+        '     PDV ALAMBARI DEFUMADOS     \n' +
+        '================================\n' +
+        'Status: Conexao Bluetooth OK\n' +
+        `Data:   ${new Date().toLocaleString('pt-BR')}\n` +
+        '================================\n'
+      );
+      alert('Página de teste simples enviada para a impressora!');
     } catch (error: any) {
       alert('Erro ao imprimir: ' + error.message);
+    }
+  };
+
+  const handleTestPrintTwoCopies = async () => {
+    if (printMode === 'browser') {
+      window.print();
+      return;
+    }
+
+    try {
+      const mockOrder = {
+        password: '042',
+        type: 'balcao',
+        createdAt: new Date().toISOString(),
+        customerName: 'Cliente Teste Alambari',
+        items: [
+          { name: 'Costela Defumada Especial', quantity: 1, price: 48.0, observation: 'Bem passada' },
+          { name: 'Refrigerante Lata 350ml', quantity: 2, price: 7.0 }
+        ],
+        total: 62.0,
+        paymentMethod: 'pix',
+        observations: 'Teste de 2 vias (Cliente + Cozinha) com corte automatico'
+      };
+
+      await thermalPrinter.printOrder(mockOrder, {
+        printCustomer: printCopiesCustomer,
+        printProduction: printCopiesProduction,
+      });
+
+      alert('Teste de 2 vias (Cliente e Produção) enviado para a impressora Bluetooth com sucesso!');
+    } catch (error: any) {
+      alert('Erro ao imprimir 2 vias: ' + error.message);
     }
   };
 
@@ -960,12 +1013,64 @@ export default function Configuracoes() {
           </div>
         </div>
 
-        <div className="mt-8 border-t pt-6 text-center">
+        {/* Configuração de Vias de Impressão */}
+        <div className="mt-6 p-5 bg-gradient-to-r from-amber-50/50 to-orange-50/50 rounded-2xl border border-amber-200/80">
+          <div className="flex items-center gap-2 mb-3">
+            <Receipt className="w-5 h-5 text-amber-700" />
+            <h4 className="font-bold text-gray-900 text-sm">Vias de Impressão do Pedido (Cliente e Cozinha)</h4>
+          </div>
+          <p className="text-xs text-gray-600 mb-4">
+            Escolha quais vias serão impressas na finalização do pedido. Cada via sai como um cupom separado com corte e espaçamento próprio para destacar facilmente.
+          </p>
+
+          <div className="grid sm:grid-cols-2 gap-3 mb-2">
+            <label className="flex items-start gap-3 p-3 bg-white rounded-xl border border-amber-200 cursor-pointer hover:bg-amber-50/50 transition-colors">
+              <input
+                type="checkbox"
+                checked={printCopiesCustomer}
+                onChange={(e) => {
+                  setPrintCopiesCustomer(e.target.checked);
+                  localStorage.setItem('printCopiesCustomer', String(e.target.checked));
+                }}
+                className="w-4 h-4 mt-0.5 text-amber-600 rounded focus:ring-amber-500"
+              />
+              <div className="text-xs">
+                <span className="font-bold text-gray-800 block text-sm">1. Via do Cliente</span>
+                <span className="text-gray-500">Cupom para o cliente com resumo dos itens, subtotais, taxa/desconto, forma de pagamento e agradecimento.</span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 bg-white rounded-xl border border-amber-200 cursor-pointer hover:bg-amber-50/50 transition-colors">
+              <input
+                type="checkbox"
+                checked={printCopiesProduction}
+                onChange={(e) => {
+                  setPrintCopiesProduction(e.target.checked);
+                  localStorage.setItem('printCopiesProduction', String(e.target.checked));
+                }}
+                className="w-4 h-4 mt-0.5 text-amber-600 rounded focus:ring-amber-500"
+              />
+              <div className="text-xs">
+                <span className="font-bold text-gray-800 block text-sm">2. Via da Produção (Cozinha)</span>
+                <span className="text-gray-500">Comanda operacional para a cozinha/churrasqueira com SENHA/MESA em destaque, itens para preparo e observações.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-8 border-t pt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
             onClick={handleTestPrint}
-            className="bg-gray-800 text-white font-bold px-6 py-3 rounded-lg hover:bg-gray-900 transition-colors"
+            className="w-full sm:w-auto bg-gray-100 text-gray-800 font-bold px-5 py-2.5 rounded-xl hover:bg-gray-200 transition-colors text-sm border border-gray-300"
           >
-            Imprimir Página de Teste
+            Imprimir Teste Rápido (1 Via)
+          </button>
+          <button
+            onClick={handleTestPrintTwoCopies}
+            className="w-full sm:w-auto bg-amber-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-amber-700 transition-colors text-sm shadow-sm flex items-center justify-center gap-2"
+          >
+            <Receipt className="w-4 h-4" />
+            Testar Impressão Completa (Via Cliente + Via Produção)
           </button>
         </div>
 

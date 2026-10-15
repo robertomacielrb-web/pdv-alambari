@@ -189,7 +189,7 @@ export default function Producao() {
       </html>
     `;
 
-    executePrint(order, content);
+    executePrint(order, content, { productionOnly: true });
 
     // Update status to preparing
     const hasPending = order.items.some(i => i.productionStatus === 'pending');

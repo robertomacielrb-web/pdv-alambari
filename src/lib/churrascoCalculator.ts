@@ -110,16 +110,24 @@ export function calculateMeatPerPersonDetails(
  * Preserva as porcentagens de proporção e recalcula o custo de cada item.
  */
 export function adjustMeatDistribution(meats: MeatItem[], targetTotalKg: number): MeatItem[] {
-  const selected = meats.filter(m => m.selected);
-  if (selected.length === 0 || targetTotalKg <= 0) {
-    return meats.map(m => (!m.selected ? { ...m, kg: 0, total: 0 } : m));
+  // Only distribute among meats that are measured in KG
+  const kgMeats = meats.filter(m => m.selected && m.unit !== 'unidade');
+  if (kgMeats.length === 0 || targetTotalKg <= 0) {
+    return meats.map(m => {
+      if (!m.selected) return { ...m, kg: 0, total: 0 };
+      return m;
+    });
   }
 
-  const sumPercentage = selected.reduce((acc, m) => acc + (m.percentage || 1), 0);
+  const sumPercentage = kgMeats.reduce((acc, m) => acc + (m.percentage || 1), 0);
 
   return meats.map(meat => {
     if (!meat.selected) {
       return { ...meat, kg: 0, total: 0 };
+    }
+    // Items measured in individual units (UN) remain unchanged
+    if (meat.unit === 'unidade') {
+      return meat;
     }
     const ratio = (meat.percentage || 1) / (sumPercentage || 1);
     const calculatedKg = Number((targetTotalKg * ratio).toFixed(2));

@@ -183,7 +183,7 @@ export function exportChurrascoProposalPDF(
     const meatRows = selectedMeats.map(m => [
       m.name,
       m.category,
-      `${m.kg.toFixed(2)} kg`,
+      m.unit === 'unidade' ? `${m.kg} un` : `${m.kg.toFixed(2)} kg`,
       'Grelhado e fatiado no ponto desejado'
     ]);
 

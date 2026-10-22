@@ -147,9 +147,9 @@ export default function Churrasco() {
   const [itemModalCategory, setItemModalCategory] = useState<'meat' | 'side' | 'drink' | 'service'>('meat');
   const [itemFormName, setItemFormName] = useState('');
   const [itemFormMeatCategory, setItemFormMeatCategory] = useState<MeatItem['category']>('Bovina');
-  const [itemFormQty, setItemFormQty] = useState<number>(1);
-  const [itemFormUnit, setItemFormUnit] = useState('unidade');
-  const [itemFormPrice, setItemFormPrice] = useState<number>(0);
+  const [itemFormQty, setItemFormQty] = useState<number | string>(2);
+  const [itemFormUnit, setItemFormUnit] = useState<string>('kg');
+  const [itemFormPrice, setItemFormPrice] = useState<number | string>(58);
   const [itemFormPercentage, setItemFormPercentage] = useState<number>(15);
 
   // Modals & Notifications
@@ -242,14 +242,21 @@ export default function Churrasco() {
     return Math.max(2, Math.ceil(totalGuests / 10));
   }, [totalGuests]);
 
-  // Selected meats total weight
+  // Selected meats total weight (only meats in KG)
   const currentTotalMeatKg = useMemo(() => {
     return Number(
       meats
-        .filter(m => m.selected)
+        .filter(m => m.selected && m.unit !== 'unidade')
         .reduce((sum, m) => sum + (Number(m.kg) || 0), 0)
         .toFixed(2)
     );
+  }, [meats]);
+
+  // Selected meats in units (items in UN)
+  const currentTotalMeatUnits = useMemo(() => {
+    return meats
+      .filter(m => m.selected && m.unit === 'unidade')
+      .reduce((sum, m) => sum + (Number(m.kg) || 0), 0);
   }, [meats]);
 
   // Subtotals
@@ -446,16 +453,35 @@ export default function Churrasco() {
     );
   };
 
-  const handleUpdateMeatKg = (id: string, newKg: number) => {
-    const safeKg = Math.max(0, Number(newKg.toFixed(2)));
+  const handleUpdateMeatKg = (id: string, newQty: number) => {
+    const targetMeat = meats.find(m => m.id === id);
+    const isUnit = targetMeat?.unit === 'unidade';
+    const safeQty = Math.max(0, isUnit ? Math.round(newQty) : Number(newQty.toFixed(2)));
     setMeats(prev =>
       prev.map(m => {
         if (m.id === id) {
           return {
             ...m,
-            kg: safeKg,
-            total: Number((safeKg * m.pricePerKg).toFixed(2)),
-            selected: safeKg > 0 ? true : m.selected
+            kg: safeQty,
+            total: Number((safeQty * m.pricePerKg).toFixed(2)),
+            selected: safeQty > 0 ? true : m.selected
+          };
+        }
+        return m;
+      })
+    );
+  };
+
+  const handleToggleMeatUnit = (id: string, newUnit: 'kg' | 'unidade') => {
+    setMeats(prev =>
+      prev.map(m => {
+        if (m.id === id) {
+          const updatedQty = newUnit === 'unidade' ? Math.max(1, Math.round(m.kg) || 1) : m.kg;
+          return {
+            ...m,
+            unit: newUnit,
+            kg: updatedQty,
+            total: Number((updatedQty * m.pricePerKg).toFixed(2))
           };
         }
         return m;
@@ -501,24 +527,24 @@ export default function Churrasco() {
     setItemFormName('');
     setItemFormMeatCategory('Bovina');
     if (cat === 'meat') {
-      setItemFormQty(2);
+      setItemFormQty('2');
       setItemFormUnit('kg');
-      setItemFormPrice(58);
+      setItemFormPrice('58');
       setItemFormPercentage(15);
     } else if (cat === 'side') {
-      setItemFormQty(1);
+      setItemFormQty('1');
       setItemFormUnit('kg');
-      setItemFormPrice(30);
+      setItemFormPrice('30');
       setItemFormPercentage(0);
     } else if (cat === 'drink') {
-      setItemFormQty(2);
+      setItemFormQty('2');
       setItemFormUnit('unidade');
-      setItemFormPrice(20);
+      setItemFormPrice('20');
       setItemFormPercentage(0);
     } else {
-      setItemFormQty(1);
+      setItemFormQty('1');
       setItemFormUnit('diária');
-      setItemFormPrice(150);
+      setItemFormPrice('150');
       setItemFormPercentage(0);
     }
     setItemModalOpen(true);
@@ -530,15 +556,20 @@ export default function Churrasco() {
     if (!itemFormName.trim()) return;
 
     if (itemModalCategory === 'meat') {
-      const qty = Number(itemFormQty) || 1;
-      const price = Number(itemFormPrice) || 0;
+      const parsedQty = parseFloat(String(itemFormQty).replace(',', '.'));
+      const qty = isNaN(parsedQty) || parsedQty <= 0 ? 1 : parsedQty;
+      const parsedPrice = parseFloat(String(itemFormPrice).replace(',', '.'));
+      const price = isNaN(parsedPrice) || parsedPrice < 0 ? 0 : parsedPrice;
+      const unit = itemFormUnit === 'unidade' ? 'unidade' : 'kg';
+
       const newMeat: MeatItem = {
         id: 'custom_meat_' + Date.now(),
         name: itemFormName.trim(),
         category: itemFormMeatCategory,
         percentage: Number(itemFormPercentage) || 15,
-        kg: qty,
-        pricePerKg: price,
+        kg: unit === 'unidade' ? Math.round(qty) : Number(qty.toFixed(2)),
+        unit: unit,
+        pricePerKg: Number(price.toFixed(2)),
         total: Number((qty * price).toFixed(2)),
         selected: true,
         isCustom: true
@@ -634,14 +665,17 @@ export default function Churrasco() {
       setServices(prev => [...prev, newService]);
     } else {
       const meatCategory = cat.includes('bov') ? 'Bovina' : cat.includes('suí') || cat.includes('sui') ? 'Suína' : cat.includes('fran') ? 'Frango' : cat.includes('lingu') || cat.includes('embut') ? 'Embutidos' : 'Outros';
+      const isUnit = prod.unit === 'un' || prod.unit === 'unidade';
+      const initialQty = isUnit ? 1 : 2;
       const newMeat: MeatItem = {
         id: 'prod_' + prod.id + '_' + Date.now(),
         name: prod.name,
         category: meatCategory,
         percentage: 15,
-        kg: prod.unit === 'kg' ? 2 : 1,
+        kg: initialQty,
+        unit: isUnit ? 'unidade' : 'kg',
         pricePerKg: price,
-        total: Number(((prod.unit === 'kg' ? 2 : 1) * price).toFixed(2)),
+        total: Number((initialQty * price).toFixed(2)),
         selected: true,
         isCustom: true
       };
@@ -966,7 +1000,7 @@ export default function Churrasco() {
         name: m.name,
         price: m.pricePerKg,
         quantity: m.kg,
-        unit: 'kg',
+        unit: m.unit === 'unidade' ? 'unidade' : 'kg',
         category: 'Carnes / Churrasco',
         observation: `Evento: ${quote.clientName || 'Churrasco'} (${quote.totalGuests || 0} convidados)`
       })),
@@ -1883,6 +1917,11 @@ export default function Churrasco() {
                   <div className="flex justify-between items-center text-xs font-semibold">
                     <span className="text-gray-700">
                       Total Selecionado: <strong className="text-gray-900">{currentTotalMeatKg.toFixed(2)} kg</strong>
+                      {currentTotalMeatUnits > 0 && (
+                        <span className="ml-1.5 bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold text-[11px]">
+                          +{currentTotalMeatUnits} un
+                        </span>
+                      )}
                     </span>
                     <span className="text-gray-500">
                       Meta Recomendada: <strong>{recommendedMeatKg.toFixed(2)} kg</strong>
@@ -1925,8 +1964,8 @@ export default function Churrasco() {
                         <th className="pb-2 text-left w-8">Ativo</th>
                         <th className="pb-2 text-left">Corte de Carne</th>
                         <th className="pb-2 text-center w-28">Categoria</th>
-                        <th className="pb-2 text-center w-36">Quantidade (KG)</th>
-                        <th className="pb-2 text-right w-28">Preço/KG (Interno)</th>
+                        <th className="pb-2 text-center w-48">Quantidade / Unidade</th>
+                        <th className="pb-2 text-right w-32">Preço (Interno)</th>
                         <th className="pb-2 text-right w-28">Subtotal (Interno)</th>
                         <th className="pb-2 text-center w-10"></th>
                       </tr>
@@ -1975,47 +2014,85 @@ export default function Churrasco() {
                               </span>
                             </td>
                             <td className="py-2.5 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  type="button"
-                                  disabled={!meat.selected}
-                                  onClick={() => handleUpdateMeatKg(meat.id, Math.max(0, meat.kg - 0.5))}
-                                  className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold flex items-center justify-center text-xs disabled:opacity-30"
-                                >
-                                  -
-                                </button>
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  min="0"
-                                  disabled={!meat.selected}
-                                  value={meat.kg}
-                                  onChange={e => handleUpdateMeatKg(meat.id, parseFloat(e.target.value) || 0)}
-                                  className="w-16 text-center font-bold py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100 outline-none focus:ring-1 focus:ring-red-500"
-                                />
-                                <span className="text-xs text-gray-500 font-semibold">kg</span>
-                                <button
-                                  type="button"
-                                  disabled={!meat.selected}
-                                  onClick={() => handleUpdateMeatKg(meat.id, meat.kg + 0.5)}
-                                  className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold flex items-center justify-center text-xs disabled:opacity-30"
-                                >
-                                  +
-                                </button>
+                              <div className="flex flex-col items-center gap-1">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={!meat.selected}
+                                    onClick={() => handleUpdateMeatKg(meat.id, Math.max(0, meat.kg - (meat.unit === 'unidade' ? 1 : 0.5)))}
+                                    className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold flex items-center justify-center text-xs disabled:opacity-30"
+                                    title={meat.unit === 'unidade' ? 'Diminuir 1 un' : 'Diminuir 0,5 kg'}
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    step={meat.unit === 'unidade' ? '1' : '0.1'}
+                                    min="0"
+                                    disabled={!meat.selected}
+                                    value={meat.kg}
+                                    onChange={e => handleUpdateMeatKg(meat.id, parseFloat(e.target.value) || 0)}
+                                    className="w-16 text-center font-bold py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100 outline-none focus:ring-1 focus:ring-red-500"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={!meat.selected}
+                                    onClick={() => handleUpdateMeatKg(meat.id, meat.kg + (meat.unit === 'unidade' ? 1 : 0.5))}
+                                    className="w-6 h-6 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold flex items-center justify-center text-xs disabled:opacity-30"
+                                    title={meat.unit === 'unidade' ? 'Aumentar 1 un' : 'Aumentar 0,5 kg'}
+                                  >
+                                    +
+                                  </button>
+                                </div>
+
+                                {/* Alternar unidade: KG ou UNIDADE */}
+                                <div className="inline-flex items-center rounded-md border border-gray-200 bg-gray-50 p-0.5 text-[10px]">
+                                  <button
+                                    type="button"
+                                    disabled={!meat.selected}
+                                    onClick={() => handleToggleMeatUnit(meat.id, 'kg')}
+                                    className={`px-2 py-0.5 rounded font-bold transition-all ${
+                                      meat.unit !== 'unidade'
+                                        ? 'bg-red-600 text-white shadow-2xs'
+                                        : 'text-gray-500 hover:text-gray-900 disabled:opacity-40'
+                                    }`}
+                                    title="Definir medição por Quilos (kg)"
+                                  >
+                                    kg
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={!meat.selected}
+                                    onClick={() => handleToggleMeatUnit(meat.id, 'unidade')}
+                                    className={`px-2 py-0.5 rounded font-bold transition-all ${
+                                      meat.unit === 'unidade'
+                                        ? 'bg-red-600 text-white shadow-2xs'
+                                        : 'text-gray-500 hover:text-gray-900 disabled:opacity-40'
+                                    }`}
+                                    title="Definir medição por Unidade (un)"
+                                  >
+                                    un
+                                  </button>
+                                </div>
                               </div>
                             </td>
                             <td className="py-2.5 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <span className="text-xs text-gray-400">R$</span>
-                                <input
-                                  type="number"
-                                  step="0.5"
-                                  min="0"
-                                  disabled={!meat.selected}
-                                  value={meat.pricePerKg}
-                                  onChange={e => handleUpdateMeatPrice(meat.id, parseFloat(e.target.value) || 0)}
-                                  className="w-16 text-right font-medium py-1 border border-gray-300 rounded text-xs disabled:bg-gray-100 outline-none focus:ring-1 focus:ring-red-500"
-                                />
+                              <div className="flex flex-col items-end gap-0.5">
+                                <div className="flex items-center justify-end gap-1">
+                                  <span className="text-xs text-gray-400">R$</span>
+                                  <input
+                                    type="number"
+                                    step="0.5"
+                                    min="0"
+                                    disabled={!meat.selected}
+                                    value={meat.pricePerKg}
+                                    onChange={e => handleUpdateMeatPrice(meat.id, parseFloat(e.target.value) || 0)}
+                                    className="w-16 text-right font-medium py-1 border border-gray-300 rounded text-xs disabled:bg-gray-100 outline-none focus:ring-1 focus:ring-red-500"
+                                  />
+                                </div>
+                                <span className="text-[10px] text-gray-400 font-medium">
+                                  {meat.unit === 'unidade' ? '/unidade' : '/kg'}
+                                </span>
                               </div>
                             </td>
                             <td className="py-2.5 text-right font-bold text-gray-900">
@@ -3125,22 +3202,58 @@ export default function Churrasco() {
                 </div>
               )}
 
+              {/* Opção de Mudar de KG pra UNIDADE para carnes */}
+              {itemModalCategory === 'meat' && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Unidade de Medida da Carne:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-lg border border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => setItemFormUnit('kg')}
+                      className={`py-1.5 px-3 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                        itemFormUnit !== 'unidade'
+                          ? 'bg-red-600 text-white shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <span>⚖️ Por Quilo (KG)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setItemFormUnit('unidade')}
+                      className={`py-1.5 px-3 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                        itemFormUnit === 'unidade'
+                          ? 'bg-red-600 text-white shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      <span>📦 Por Unidade (UN)</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    {itemModalCategory === 'meat' ? 'Quantidade Inicial (KG):' : 'Quantidade:'}
+                    {itemModalCategory === 'meat' 
+                      ? (itemFormUnit === 'unidade' ? 'Quantidade (Unidades):' : 'Quantidade Inicial (KG):')
+                      : 'Quantidade:'}
                   </label>
                   <input
                     type="number"
-                    step={itemModalCategory === 'meat' ? '0.25' : '1'}
-                    min="0.1"
+                    step={itemModalCategory === 'meat' ? (itemFormUnit === 'unidade' ? '1' : 'any') : 'any'}
+                    min="0"
+                    placeholder="0"
                     value={itemFormQty}
-                    onChange={e => setItemFormQty(parseFloat(e.target.value) || 1)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-gray-50 focus:bg-white outline-none"
+                    onChange={e => setItemFormQty(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-red-500 font-semibold"
                   />
                 </div>
 
-                {itemModalCategory !== 'meat' && (
+                {itemModalCategory !== 'meat' ? (
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">Unidade de Medida:</label>
                     <input
@@ -3148,24 +3261,34 @@ export default function Churrasco() {
                       placeholder="Ex: kg, garrafa, fardo, diária, porção"
                       value={itemFormUnit}
                       onChange={e => setItemFormUnit(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-gray-50 focus:bg-white outline-none"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-red-500"
                     />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Tipo de Medição:</label>
+                    <div className="px-3 py-2 bg-gray-100 rounded-lg text-xs font-bold text-gray-700 border border-gray-200">
+                      {itemFormUnit === 'unidade' ? '📦 Peça / Unidade' : '⚖️ Peso (KG)'}
+                    </div>
                   </div>
                 )}
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  {itemModalCategory === 'meat' ? 'Preço por KG (R$):' : 'Preço Unitário / Valor (R$):'}
+                  {itemModalCategory === 'meat' 
+                    ? (itemFormUnit === 'unidade' ? 'Preço por Unidade / Peça (R$):' : 'Preço por KG (R$):')
+                    : 'Preço Unitário / Valor (R$):'}
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
                   <input
                     type="number"
-                    step="0.5"
+                    step="any"
                     min="0"
+                    placeholder="0.00"
                     value={itemFormPrice}
-                    onChange={e => setItemFormPrice(parseFloat(e.target.value) || 0)}
+                    onChange={e => setItemFormPrice(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm font-bold text-gray-900 bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>

@@ -65,16 +65,19 @@ export function calculateRecommendedMeatKg(
 }
 
 export function distributeMeatsProportionally(meats: MeatItem[], targetKg: number): MeatItem[] {
-  const selected = meats.filter(m => m.selected);
-  if (selected.length === 0 || targetKg <= 0) {
-    return meats.map(m => ({ ...m, kg: 0, total: 0 }));
+  const selectedKgMeats = meats.filter(m => m.selected && m.unit !== 'unidade');
+  if (selectedKgMeats.length === 0 || targetKg <= 0) {
+    return meats.map(m => (!m.selected ? { ...m, kg: 0, total: 0 } : m));
   }
 
-  const sumPercentage = selected.reduce((acc, m) => acc + (m.percentage || 1), 0);
+  const sumPercentage = selectedKgMeats.reduce((acc, m) => acc + (m.percentage || 1), 0);
 
   return meats.map(meat => {
     if (!meat.selected) {
       return { ...meat, kg: 0, total: 0 };
+    }
+    if (meat.unit === 'unidade') {
+      return meat;
     }
     const ratio = (meat.percentage || 1) / (sumPercentage || 1);
     const calculatedKg = Number((targetKg * ratio).toFixed(2));

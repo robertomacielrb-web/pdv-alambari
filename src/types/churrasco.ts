@@ -4,6 +4,7 @@ export interface MeatItem {
   category: 'Bovina' | 'Suína' | 'Frango' | 'Embutidos' | 'Outros';
   percentage: number; // Suggested proportion %
   kg: number;
+  unit?: 'kg' | 'unidade';
   pricePerKg: number;
   total: number;
   selected: boolean;

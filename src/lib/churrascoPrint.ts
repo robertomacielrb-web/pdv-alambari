@@ -378,19 +378,19 @@ export function printChurrasqueiroList(quote: EventQuote, storeSettings?: { stor
       <div>Duração: ${quote.durationHours}h</div>
 
       <div class="divider"></div>
-      <h3>🥩 CARNES PARA PREPARO / CORTE (${quote.totalMeatKg.toFixed(2).replace('.', ',')} KG TOTAL)</h3>
+      <h3>🥩 CARNES PARA PREPARO / CORTE</h3>
       <table>
         <thead>
           <tr>
             <th>[ ] ITEM</th>
-            <th class="text-right">PESO (KG)</th>
+            <th class="text-right">QUANTIDADE</th>
           </tr>
         </thead>
         <tbody>
           ${selectedMeats.map(m => `
             <tr>
               <td>[ ] ${m.name}</td>
-              <td class="text-right"><strong>${m.kg.toFixed(2).replace('.', ',')} kg</strong></td>
+              <td class="text-right"><strong>${m.unit === 'unidade' ? `${m.kg} un` : `${m.kg.toFixed(2).replace('.', ',')} kg`}</strong></td>
             </tr>
           `).join('')}
         </tbody>

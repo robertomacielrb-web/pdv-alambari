@@ -36,7 +36,11 @@ import {
   Maximize2,
   Minimize2,
   Monitor,
-  Receipt
+  Receipt,
+  Plus,
+  Trash2,
+  MapPin,
+  Search
 } from 'lucide-react';
 import { thermalPrinter, formatCustomerSenhaHighlight } from '../lib/printer';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
@@ -46,6 +50,7 @@ import { useCashierAuth } from '../contexts/CashierAuthContext';
 import { useStoreSettings } from '../contexts/StoreSettingsContext';
 import { useFullscreen } from '../contexts/FullscreenContext';
 import { compressAndResizeImage } from '../lib/imageCompressor';
+import { DEFAULT_DELIVERY_REGIONS, DeliveryRegion } from '../data/deliveryRegions';
 
 export default function Configuracoes() {
   const {
@@ -72,11 +77,104 @@ export default function Configuracoes() {
     logoUrl,
     isCustomLogo,
     storeName,
+    deliveryRegions: contextDeliveryRegions,
     updateLogo,
     resetLogo,
+    updateSettings,
   } = useStoreSettings();
 
   const [currentStoreName, setCurrentStoreName] = useState(storeName || 'Alambari Defumados');
+  const [deliveryRegionsList, setDeliveryRegionsList] = useState<DeliveryRegion[]>(
+    contextDeliveryRegions && contextDeliveryRegions.length > 0 ? contextDeliveryRegions : DEFAULT_DELIVERY_REGIONS
+  );
+  const [newRegionName, setNewRegionName] = useState('');
+  const [newRegionFee, setNewRegionFee] = useState('');
+  const [searchRegionTerm, setSearchRegionTerm] = useState('');
+  const [isSavingRegions, setIsSavingRegions] = useState(false);
+  const [regionSavedMsg, setRegionSavedMsg] = useState(false);
+
+  useEffect(() => {
+    if (contextDeliveryRegions && contextDeliveryRegions.length > 0) {
+      setDeliveryRegionsList(contextDeliveryRegions);
+    }
+  }, [contextDeliveryRegions]);
+
+  const handleAddNewRegion = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = newRegionName.trim();
+    if (!trimmed) {
+      alert('Por favor, informe o nome do local ou bairro.');
+      return;
+    }
+    const cleanFee = String(newRegionFee).trim().replace(/[^\d.,]/g, '').replace(',', '.');
+    const feeNum = parseFloat(cleanFee) || 0;
+    if (feeNum < 0) {
+      alert('A taxa de entrega não pode ser negativa.');
+      return;
+    }
+
+    const newId = `reg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    setDeliveryRegionsList((prev) => [
+      ...prev,
+      { id: newId, name: trimmed, fee: feeNum },
+    ]);
+    setNewRegionName('');
+    setNewRegionFee('');
+  };
+
+  const handleUpdateRegionName = (id: string, newName: string) => {
+    setDeliveryRegionsList((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, name: newName } : r))
+    );
+  };
+
+  const handleUpdateRegionFee = (id: string, newFee: number) => {
+    setDeliveryRegionsList((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, fee: isNaN(newFee) ? 0 : newFee } : r))
+    );
+  };
+
+  const handleRemoveRegion = (id: string, name: string) => {
+    if (window.confirm(`Deseja realmente remover o local "${name}" da lista de entregas?`)) {
+      setDeliveryRegionsList((prev) => prev.filter((r) => r.id !== id));
+    }
+  };
+
+  const handleResetDefaultRegions = () => {
+    if (window.confirm('Deseja restaurar as taxas padrão originais de todas as 12 regiões?')) {
+      setDeliveryRegionsList(DEFAULT_DELIVERY_REGIONS);
+    }
+  };
+
+  const handleSaveDeliveryRegions = async () => {
+    // Validate that no region has an empty name
+    const hasEmpty = deliveryRegionsList.some((r) => !r.name.trim());
+    if (hasEmpty) {
+      alert('Existem locais com o nome em branco. Por favor preencha ou exclua os itens sem nome antes de salvar.');
+      return;
+    }
+
+    setIsSavingRegions(true);
+    try {
+      const sanitized = deliveryRegionsList.map((r) => ({
+        id: r.id,
+        name: r.name.trim(),
+        fee: Number(r.fee) || 0,
+      }));
+      const res = await updateSettings({ deliveryRegions: sanitized });
+      if (res.success) {
+        setRegionSavedMsg(true);
+        setTimeout(() => setRegionSavedMsg(false), 3500);
+      } else {
+        alert('Erro ao salvar taxas: ' + (res.error || 'Tente novamente'));
+      }
+    } catch (e: any) {
+      alert('Erro ao salvar taxas de entrega: ' + (e.message || 'Tente novamente'));
+    } finally {
+      setIsSavingRegions(false);
+    }
+  };
+
   const [logoMethod, setLogoMethod] = useState<'upload' | 'url'>('upload');
   const [pendingLogoPreview, setPendingLogoPreview] = useState<string | null>(null);
   const [logoUrlInput, setLogoUrlInput] = useState('');
@@ -484,6 +582,219 @@ export default function Configuracoes() {
             {isSavingConfig ? 'Salvando...' : (
               <>
                 <Save className="w-4 h-4" /> Salvar Configurações
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Regiões e Taxas de Entrega Pré-definidas - Criar, Alterar e Excluir */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4 mb-5">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 bg-orange-100 text-orange-700 rounded-xl">
+              <Truck className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold text-gray-800">
+                  Locais e Valores de Entrega (Delivery)
+                </h2>
+                <span className="bg-orange-100 text-orange-800 font-extrabold text-xs px-2.5 py-0.5 rounded-full">
+                  {deliveryRegionsList.length} locais
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Crie novos locais, altere nomes e taxas, ou exclua regiões. As opções são sincronizadas no Delivery do caixa e no Cardápio Digital.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleResetDefaultRegions}
+              className="text-xs font-bold text-gray-600 hover:text-orange-700 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+              title="Restaurar lista com as 12 regiões padrões originais"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Restaurar Padrões
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveDeliveryRegions}
+              disabled={isSavingRegions}
+              className="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {isSavingRegions ? (
+                'Salvando...'
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" /> Salvar Alterações
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {regionSavedMsg && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-800 rounded-xl text-xs font-bold flex items-center gap-2">
+            <Check className="w-4 h-4 text-green-600" />
+            Locais e valores de entrega atualizados e salvos com sucesso!
+          </div>
+        )}
+
+        {/* Formulário para Criar Novo Local / Região */}
+        <form
+          onSubmit={handleAddNewRegion}
+          className="bg-orange-50/60 border border-orange-200 rounded-2xl p-4 mb-6 shadow-2xs"
+        >
+          <div className="flex items-center gap-2 mb-3 text-orange-900 font-bold text-sm">
+            <Plus className="w-4 h-4 text-orange-600" />
+            <span>Cadastrar Novo Local / Região de Entrega</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <div className="sm:col-span-7">
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                Nome do Local ou Bairro <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <MapPin className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={newRegionName}
+                  onChange={(e) => setNewRegionName(e.target.value)}
+                  placeholder="Ex: Condomínio Bela Vista, Bairro Primavera..."
+                  className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-sm font-semibold text-gray-800 focus:border-orange-500 outline-none"
+                />
+              </div>
+            </div>
+            <div className="sm:col-span-3">
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                Valor da Taxa (R$)
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-500">
+                  R$
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.50"
+                  value={newRegionFee}
+                  onChange={(e) => setNewRegionFee(e.target.value)}
+                  placeholder="0,00"
+                  className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-sm font-black text-gray-800 focus:border-orange-500 outline-none"
+                />
+              </div>
+            </div>
+            <div className="sm:col-span-2">
+              <button
+                type="submit"
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Adicionar
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {/* Barra de Filtro e Título da Lista */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+          <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+            Locais Cadastrados (Edite o nome ou valor diretamente nos campos abaixo):
+          </span>
+          <div className="relative max-w-xs w-full">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchRegionTerm}
+              onChange={(e) => setSearchRegionTerm(e.target.value)}
+              placeholder="Buscar local cadastrado..."
+              className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-1.5 text-xs text-gray-800 focus:border-orange-500 outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Lista de Locais Cadastrados com Edição de Nome, Valor e Exclusão */}
+        {deliveryRegionsList.length === 0 ? (
+          <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-gray-500 text-sm">
+            Nenhum local cadastrado. Utilize o formulário acima para adicionar locais de entrega.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {deliveryRegionsList
+              .filter((region) =>
+                searchRegionTerm.trim() === ''
+                  ? true
+                  : region.name.toLowerCase().includes(searchRegionTerm.toLowerCase())
+              )
+              .map((region) => (
+                <div
+                  key={region.id}
+                  className="p-2.5 sm:p-3 rounded-xl border border-gray-200 bg-gray-50/60 hover:bg-white hover:border-orange-300 transition-all flex items-center gap-2 shadow-2xs"
+                >
+                  <MapPin className="w-4 h-4 text-orange-600 shrink-0" />
+                  
+                  {/* Nome do Local (Editável) */}
+                  <div className="flex-1 min-w-0">
+                    <input
+                      type="text"
+                      value={region.name}
+                      onChange={(e) => handleUpdateRegionName(region.id, e.target.value)}
+                      placeholder="Nome do local / bairro"
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-bold text-gray-800 focus:border-orange-500 outline-none truncate"
+                      title={region.name}
+                    />
+                  </div>
+
+                  {/* Valor da Taxa (Editável) */}
+                  <div className="relative w-24 sm:w-28 shrink-0">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
+                      R$
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.50"
+                      value={region.fee === 0 ? '' : region.fee}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                        handleUpdateRegionFee(region.id, val);
+                      }}
+                      placeholder="0,00"
+                      className="w-full bg-white border border-gray-200 rounded-lg pl-7 pr-2 py-1.5 text-right font-black text-xs sm:text-sm text-gray-800 focus:border-orange-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Botão de Excluir */}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveRegion(region.id, region.name)}
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                    title={`Excluir "${region.name}"`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {/* Rodapé com Botão de Salvar Alterações */}
+        <div className="mt-5 pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-xs text-gray-500">
+            * Clique em <strong>Salvar Alterações</strong> para aplicar os novos locais e preços em todo o sistema.
+          </p>
+          <button
+            type="button"
+            onClick={handleSaveDeliveryRegions}
+            disabled={isSavingRegions}
+            className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 text-sm"
+          >
+            {isSavingRegions ? (
+              'Salvando...'
+            ) : (
+              <>
+                <Save className="w-4 h-4" /> Salvar Alterações
               </>
             )}
           </button>

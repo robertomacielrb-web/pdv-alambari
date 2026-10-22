@@ -70,7 +70,8 @@ service cloud.firestore {
              (!('costPrice' in data) || isValidNumber(data.costPrice, 0)) &&
              (!('stock' in data) || isValidNumber(data.stock, 0)) &&
              (!('unit' in data) || (data.unit == 'unidade' || data.unit == 'kg')) &&
-             (!('erpOnly' in data) || data.erpOnly is bool);
+             (!('erpOnly' in data) || data.erpOnly is bool) &&
+             (!('showInDelivery' in data) || data.showInDelivery is bool);
     }
 
     function isValidCustomer(data) {

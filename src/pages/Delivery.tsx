@@ -26,11 +26,14 @@ import {
   Wallet,
   Bell,
   Scale,
+  MapPin,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
 import { executePrint } from "../lib/printHelper";
 import WeightModal, { formatKg, parseItemQuantity } from "../components/WeightModal";
+import { useStoreSettings } from "../contexts/StoreSettingsContext";
+import { DEFAULT_DELIVERY_REGIONS, DeliveryRegion } from "../data/deliveryRegions";
 
 interface Product {
   id: string;
@@ -39,6 +42,7 @@ interface Product {
   category: string;
   unit?: 'unidade' | 'kg';
   stock?: number;
+  showInDelivery?: boolean;
 }
 
 interface CartItem extends Product {
@@ -71,6 +75,10 @@ export default function Delivery() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [address, setAddress] = useState("");
   const [observations, setObservations] = useState("");
+  const { deliveryRegions: contextRegions } = useStoreSettings();
+  const availableRegions: DeliveryRegion[] = (contextRegions && contextRegions.length > 0) ? contextRegions : DEFAULT_DELIVERY_REGIONS;
+  const [selectedRegionId, setSelectedRegionId] = useState<string>("");
+  const [selectedRegionName, setSelectedRegionName] = useState<string>("");
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [step, setStep] = useState<1 | 2>(1);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -116,6 +124,7 @@ export default function Delivery() {
       snapshot.forEach((doc) => {
         const data = doc.data();
         if (data.erpOnly) return; // Do not show ERP-only products here
+        if (data.showInDelivery === false) return; // Do not show products hidden from delivery menu
         const normalizedCategory = data.category
           ? data.category.trim()
           : "";
@@ -124,6 +133,7 @@ export default function Delivery() {
           ...data,
           category: normalizedCategory,
           unit: data.unit || 'unidade',
+          showInDelivery: data.showInDelivery,
         } as Product);
       });
       setProducts(prods);
@@ -368,7 +378,7 @@ export default function Delivery() {
             <h1 style="margin: 10px 0; font-size: 20px;">DELIVERY #${order.password}</h1>
             ${order.customerName ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold;">CLIENTE: ${order.customerName}</p>` : ""}
             ${order.deliveryPhone ? `<p style="margin: 5px 0; font-size: 14px;">TEL: ${order.deliveryPhone}</p>` : ""}
-            ${order.deliveryAddress ? `<p style="margin: 5px 0; font-size: 14px; border: 1px dotted #000; padding: 5px;">ENDEREÇO:<br>${order.deliveryAddress}</p>` : ""}
+            ${order.deliveryAddress ? `<p style="margin: 5px 0; font-size: 14px; border: 1px dotted #000; padding: 5px;">ENDEREÇO:<br>${order.deliveryAddress}${order.deliveryRegion ? `<br><span style="display:block;margin-top:4px;font-weight:bold;color:#000;">REGIÃO: ${order.deliveryRegion}</span>` : ""}</p>` : ""}
             ${order.observations ? `<p style="margin: 5px 0; font-weight: bold;">OBS: ${order.observations}</p>` : ""}
           </div>
           <table>
@@ -414,6 +424,7 @@ export default function Delivery() {
             <h1 style="margin: 10px 0; font-size: 26px;">DELIVERY #${order.password}</h1>
             <p style="margin: 5px 0;">Data: ${format(new Date(order.closedAt), "dd/MM/yyyy HH:mm")}</p>
             ${order.customerName ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold;">CLIENTE: ${order.customerName}</p>` : ""}
+            ${order.deliveryAddress ? `<p style="margin: 5px 0; font-size: 14px; border: 1px dotted #000; padding: 5px;">ENDEREÇO: ${order.deliveryAddress}${order.deliveryRegion ? ` (${order.deliveryRegion})` : ""}</p>` : ""}
             ${order.observations ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold; border: 2px solid #000; padding: 5px;">OBS GERAL: ${order.observations}</p>` : ""}
           </div>
           <table>
@@ -447,7 +458,23 @@ export default function Delivery() {
     setAddress(order.deliveryAddress || "");
     setPhoneNumber(order.deliveryPhone || "");
     setObservations(order.observations || "");
-    if (order.deliveryFee) setDeliveryFee(order.deliveryFee);
+    if (order.deliveryFee !== undefined && order.deliveryFee !== null) {
+      setDeliveryFee(Number(order.deliveryFee));
+    }
+    if (order.deliveryRegion) {
+      setSelectedRegionName(order.deliveryRegion);
+      const matched = availableRegions.find(
+        (r) => r.name.toLowerCase() === String(order.deliveryRegion).toLowerCase() || r.id === order.deliveryRegion
+      );
+      if (matched) {
+        setSelectedRegionId(matched.id);
+      } else {
+        setSelectedRegionId("custom");
+      }
+    } else {
+      setSelectedRegionId("");
+      setSelectedRegionName("");
+    }
     if (order.paymentMethod && ["dinheiro", "cartao", "pix"].includes(order.paymentMethod)) {
       setPaymentMethod(order.paymentMethod);
     }
@@ -519,6 +546,7 @@ export default function Delivery() {
         deliveryPhone: phoneNumber,
         deliveryAddress: address,
         deliveryFee: Number(deliveryFee) || 0,
+        deliveryRegion: selectedRegionName || "",
         observations,
         createdAt: new Date().toISOString(),
         closedAt: new Date().toISOString(),
@@ -546,6 +574,8 @@ export default function Delivery() {
       setAddress("");
       setPhoneNumber("");
       setDeliveryFee(0);
+      setSelectedRegionId("");
+      setSelectedRegionName("");
       setObservations("");
       setDiscount("");
       setSplitPayments({ dinheiro: "", cartao: "", pix: "" });
@@ -949,19 +979,169 @@ export default function Delivery() {
                   className="w-full border-2 border-gray-200 rounded-xl p-3 h-20 focus:border-orange-500 outline-none resize-none"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
-                  Taxa de Entrega (R$)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.50"
-                  value={deliveryFee || ""}
-                  onChange={(e) => setDeliveryFee(parseFloat(e.target.value))}
-                  placeholder="0,00"
-                  className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-orange-500 outline-none font-bold text-lg"
-                />
+              {/* Região e Taxa de Entrega Pré-definidas com Edição Livre */}
+              <div className="space-y-3 bg-white p-3.5 rounded-2xl border-2 border-orange-100 shadow-xs">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-orange-600" />
+                      Região de Entrega
+                    </label>
+                    {selectedRegionName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRegionId("");
+                          setSelectedRegionName("");
+                        }}
+                        className="text-[11px] text-gray-500 hover:text-red-600 underline font-semibold cursor-pointer"
+                      >
+                        Limpar seleção
+                      </button>
+                    )}
+                  </div>
+
+                  <select
+                    value={selectedRegionId}
+                    onChange={(e) => {
+                      const regionId = e.target.value;
+                      setSelectedRegionId(regionId);
+                      if (!regionId) {
+                        setSelectedRegionName("");
+                        return;
+                      }
+                      if (regionId === "custom") {
+                        setSelectedRegionName("Personalizado / Outro");
+                        return;
+                      }
+                      const found = availableRegions.find((r) => r.id === regionId);
+                      if (found) {
+                        setSelectedRegionName(found.name);
+                        setDeliveryFee(found.fee);
+                      }
+                    }}
+                    className="w-full border-2 border-gray-200 rounded-xl p-2.5 text-sm font-bold text-gray-800 bg-white focus:border-orange-500 outline-none"
+                  >
+                    <option value="">Selecione a região pré-definida...</option>
+                    {availableRegions.map((region) => (
+                      <option key={region.id} value={region.id}>
+                        {region.name} — R$ {region.fee.toFixed(2).replace('.', ',')}
+                      </option>
+                    ))}
+                    <option value="custom">Outro local / Taxa personalizada</option>
+                  </select>
+
+                  {/* Atalhos rápidos das regiões para clique direto */}
+                  <div className="mt-2.5">
+                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                      Toque rápido na região:
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1 bg-gray-50 rounded-xl border border-gray-200">
+                      {availableRegions.map((region) => {
+                        const isSelected = selectedRegionId === region.id;
+                        return (
+                          <button
+                            key={region.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedRegionId(region.id);
+                              setSelectedRegionName(region.name);
+                              setDeliveryFee(region.fee);
+                            }}
+                            className={`p-2 rounded-lg text-left text-xs font-bold transition-all flex items-center justify-between gap-1 border cursor-pointer ${
+                              isSelected
+                                ? "bg-orange-600 text-white border-orange-600 shadow-sm ring-2 ring-orange-300"
+                                : "bg-white text-gray-700 border-gray-200 hover:border-orange-300 hover:bg-orange-50/50"
+                            }`}
+                          >
+                            <span className="truncate" title={region.name}>{region.name}</span>
+                            <span
+                              className={`shrink-0 px-1.5 py-0.5 rounded text-[11px] font-black ${
+                                isSelected ? "bg-orange-800 text-white" : "bg-orange-100 text-orange-900"
+                              }`}
+                            >
+                              R$ {region.fee}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Campo de valor da taxa (sempre livre para editar) */}
+                <div className="pt-2 border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest">
+                      Taxa de Entrega (R$)
+                    </label>
+                    <span className="text-[11px] text-gray-500 font-semibold">
+                      (Valor editável a qualquer momento)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">
+                        R$
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.50"
+                        value={deliveryFee === 0 ? "" : deliveryFee}
+                        onChange={(e) => {
+                          const val = e.target.value === "" ? 0 : parseFloat(e.target.value);
+                          setDeliveryFee(isNaN(val) ? 0 : val);
+                        }}
+                        placeholder="0,00"
+                        className="w-full border-2 border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:border-orange-500 outline-none font-black text-lg text-gray-800 bg-white"
+                      />
+                    </div>
+                    {deliveryFee > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeliveryFee(0);
+                          setSelectedRegionId("");
+                          setSelectedRegionName("");
+                        }}
+                        className="px-3 py-2.5 text-xs font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        Zerar Taxa
+                      </button>
+                    )}
+                  </div>
+
+                  {selectedRegionName && (
+                    <div className="mt-2 text-xs bg-orange-50 border border-orange-200 rounded-lg p-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-orange-900">
+                      <div>
+                        <span>Região: <strong>{selectedRegionName}</strong></span>
+                        {(() => {
+                          const matched = availableRegions.find((r) => r.id === selectedRegionId);
+                          if (matched && matched.fee !== Number(deliveryFee)) {
+                            return (
+                              <span className="block text-[11px] text-amber-800 font-medium mt-0.5">
+                                • Valor alterado manualmente (taxa padrão era R$ {matched.fee.toFixed(2).replace('.', ',')})
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+                      {!address.includes(selectedRegionName) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddress((prev) => (prev ? `${prev} - ${selectedRegionName}` : selectedRegionName));
+                          }}
+                          className="text-orange-700 hover:text-orange-900 underline font-bold text-left sm:text-right shrink-0 cursor-pointer"
+                        >
+                          + Adicionar ao Endereço
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
@@ -1123,9 +1303,12 @@ export default function Delivery() {
                     
                     let message = `*Olá, ${lastOrder.customerName}!* Aqui é do Alambari Defumados 🍖\n\nSeu pedido foi confirmado!\n\n`;
                     message += `*RESUMO DO PEDIDO:*\n${itemsText}\n\n`;
-                    message += `*Subtotal:* R$ ${(lastOrder.total - lastOrder.deliveryFee).toFixed(2).replace('.', ',')}\n`;
-                    message += `*Taxa de Entrega:* R$ ${lastOrder.deliveryFee.toFixed(2).replace('.', ',')}\n`;
-                    message += `*TOTAL:* R$ ${lastOrder.total.toFixed(2).replace('.', ',')}\n\n`;
+                    message += `*Subtotal:* R$ ${(Number(lastOrder.total || 0) - Number(lastOrder.deliveryFee || 0)).toFixed(2).replace('.', ',')}\n`;
+                    if (lastOrder.deliveryRegion) {
+                      message += `*Região:* ${lastOrder.deliveryRegion}\n`;
+                    }
+                    message += `*Taxa de Entrega:* R$ ${Number(lastOrder.deliveryFee || 0).toFixed(2).replace('.', ',')}\n`;
+                    message += `*TOTAL:* R$ ${Number(lastOrder.total || 0).toFixed(2).replace('.', ',')}\n\n`;
                     message += `*Previsão de entrega:* 40 à 60 minutos dependendo da sua localidade.\n`;
                     message += `Obrigado pela preferência!`;
 

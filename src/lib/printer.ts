@@ -345,6 +345,9 @@ export function formatCustomerReceiptText(order: any): string {
   if (order.deliveryAddress) {
     text += `END: ${order.deliveryAddress}\n`;
   }
+  if (order.deliveryRegion) {
+    text += `REGIAO: ${order.deliveryRegion}\n`;
+  }
 
   text += `--------------------------------\n`;
   text += `QTD ITEM                  PRECO\n`;
@@ -438,6 +441,9 @@ export function formatProductionReceiptText(order: any): string {
   }
   if (order.deliveryAddress) {
     text += `END: ${order.deliveryAddress}\n`;
+  }
+  if (order.deliveryRegion) {
+    text += `REGIAO: ${order.deliveryRegion}\n`;
   }
 
   text += `--------------------------------\n`;

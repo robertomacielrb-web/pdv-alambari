@@ -2,11 +2,14 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 
+import { DeliveryRegion, DEFAULT_DELIVERY_REGIONS } from '../data/deliveryRegions';
+
 export interface StoreSettingsData {
   storeName?: string;
   logoUrl?: string;
   whatsappNumber?: string;
   pixKey?: string;
+  deliveryRegions?: DeliveryRegion[];
   updatedAt?: string;
 }
 
@@ -16,6 +19,7 @@ interface StoreSettingsContextValue {
   storeName: string;
   whatsappNumber: string;
   pixKey: string;
+  deliveryRegions: DeliveryRegion[];
   loading: boolean;
   updateLogo: (newLogo: string) => Promise<{ success: boolean; error?: string }>;
   resetLogo: () => Promise<{ success: boolean; error?: string }>;
@@ -41,6 +45,7 @@ export const StoreSettingsProvider: React.FC<{ children: React.ReactNode }> = ({
       logoUrl: cachedLogo || DEFAULT_LOGO_URL,
       whatsappNumber: '',
       pixKey: '',
+      deliveryRegions: DEFAULT_DELIVERY_REGIONS,
     };
   });
   const [loading, setLoading] = useState(true);
@@ -58,6 +63,9 @@ export const StoreSettingsProvider: React.FC<{ children: React.ReactNode }> = ({
             logoUrl: resolvedLogo,
             whatsappNumber: data.whatsappNumber || '',
             pixKey: data.pixKey || '',
+            deliveryRegions: Array.isArray(data.deliveryRegions)
+              ? data.deliveryRegions
+              : DEFAULT_DELIVERY_REGIONS,
             updatedAt: data.updatedAt,
           });
           try {
@@ -183,6 +191,7 @@ export const StoreSettingsProvider: React.FC<{ children: React.ReactNode }> = ({
         storeName: settings.storeName || DEFAULT_STORE_NAME,
         whatsappNumber: settings.whatsappNumber || '',
         pixKey: settings.pixKey || '',
+        deliveryRegions: settings.deliveryRegions || DEFAULT_DELIVERY_REGIONS,
         loading,
         updateLogo,
         resetLogo,

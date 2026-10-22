@@ -17,7 +17,8 @@ import {
   Package,
   Scale,
   Save,
-  Loader2
+  Loader2,
+  Truck
 } from 'lucide-react';
 
 interface Product {
@@ -30,6 +31,7 @@ interface Product {
   stock?: number;
   unit?: 'unidade' | 'kg';
   erpOnly?: boolean;
+  showInDelivery?: boolean;
   createdAt: string;
 }
 
@@ -37,7 +39,17 @@ export default function Produtos() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [formData, setFormData] = useState({ name: '', price: '', costPrice: '', wholesalePrice: '', category: '', stock: '', unit: 'unidade', erpOnly: false });
+  const [formData, setFormData] = useState({
+    name: '',
+    price: '',
+    costPrice: '',
+    wholesalePrice: '',
+    category: '',
+    stock: '',
+    unit: 'unidade',
+    erpOnly: false,
+    showInDelivery: true,
+  });
   const [isSaving, setIsSaving] = useState(false);
   const [isNewCategory, setIsNewCategory] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,6 +58,7 @@ export default function Produtos() {
   const [showFilters, setShowFilters] = useState<boolean>(true);
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'available' | 'out'>('all');
   const [unitFilter, setUnitFilter] = useState<'all' | 'unidade' | 'kg'>('all');
+  const [deliveryFilter, setDeliveryFilter] = useState<'all' | 'delivery' | 'no_delivery'>('all');
   const categoryScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -98,9 +111,10 @@ export default function Produtos() {
     setPriceFilter(null);
     setStockFilter('all');
     setUnitFilter('all');
+    setDeliveryFilter('all');
   };
 
-  const hasActiveFilters = searchTerm !== '' || selectedCategory !== 'all' || priceFilter !== null || stockFilter !== 'all' || unitFilter !== 'all';
+  const hasActiveFilters = searchTerm !== '' || selectedCategory !== 'all' || priceFilter !== null || stockFilter !== 'all' || unitFilter !== 'all' || deliveryFilter !== 'all';
 
   const groupedProducts = useMemo(() => {
     const filtered = products.filter(p => {
@@ -116,7 +130,13 @@ export default function Produtos() {
       } else if (stockFilter === 'out') {
         matchesStock = p.stock !== undefined && p.stock === 0;
       }
-      return matchesSearch && matchesCategory && matchesPrice && matchesUnit && matchesStock;
+      let matchesDelivery = true;
+      if (deliveryFilter === 'delivery') {
+        matchesDelivery = p.showInDelivery !== false;
+      } else if (deliveryFilter === 'no_delivery') {
+        matchesDelivery = p.showInDelivery === false;
+      }
+      return matchesSearch && matchesCategory && matchesPrice && matchesUnit && matchesStock && matchesDelivery;
     });
 
     return filtered.reduce((acc, product) => {
@@ -126,7 +146,7 @@ export default function Produtos() {
       acc[product.category].push(product);
       return acc;
     }, {} as Record<string, Product[]>);
-  }, [products, searchTerm, selectedCategory, priceFilter, unitFilter, stockFilter]);
+  }, [products, searchTerm, selectedCategory, priceFilter, unitFilter, stockFilter, deliveryFilter]);
 
   const totalFilteredCount = useMemo(() => {
     return Object.values(groupedProducts).reduce((sum, list) => sum + list.length, 0);
@@ -196,7 +216,8 @@ export default function Produtos() {
         category: formData.category.trim(),
         ...(stockVal !== undefined && { stock: stockVal }),
         unit: formData.unit || 'unidade',
-        erpOnly: formData.erpOnly
+        erpOnly: formData.erpOnly,
+        showInDelivery: formData.showInDelivery !== false,
       };
 
       if (!productData.name || !productData.category) {
@@ -250,13 +271,24 @@ export default function Produtos() {
         category: product.category,
         stock: product.stock !== undefined ? product.stock.toString() : '',
         unit: product.unit || 'unidade',
-        erpOnly: product.erpOnly || false
+        erpOnly: product.erpOnly || false,
+        showInDelivery: product.showInDelivery !== false,
       });
       setIsNewCategory(false);
     } else {
       setEditingProduct(null);
       const defaultCat = Object.keys(groupedProducts).length > 0 ? Object.keys(groupedProducts).sort()[0] : '';
-      setFormData({ name: '', price: '', costPrice: '', wholesalePrice: '', category: defaultCat, stock: '', unit: 'unidade', erpOnly: false });
+      setFormData({
+        name: '',
+        price: '',
+        costPrice: '',
+        wholesalePrice: '',
+        category: defaultCat,
+        stock: '',
+        unit: 'unidade',
+        erpOnly: false,
+        showInDelivery: true,
+      });
       setIsNewCategory(Object.keys(groupedProducts).length === 0);
     }
     setIsModalOpen(true);
@@ -405,7 +437,7 @@ export default function Produtos() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Slider 1: Barra Deslizante de Preço Máximo */}
             <div className="space-y-2 bg-gray-50/70 p-3 rounded-lg border border-gray-200">
               <div className="flex justify-between items-center text-xs font-semibold text-gray-700">
@@ -557,6 +589,55 @@ export default function Produtos() {
                 </button>
               </div>
             </div>
+
+            {/* Control 4: Disponibilidade no Delivery */}
+            <div className="space-y-2 bg-gray-50/70 p-3 rounded-lg border border-gray-200">
+              <div className="flex justify-between items-center text-xs font-semibold text-gray-700">
+                <span className="flex items-center gap-1 text-gray-900">
+                  <Truck className="w-3.5 h-3.5 text-orange-600" />
+                  Cardápio Delivery
+                </span>
+                <span className="text-gray-500 font-normal text-[11px]">
+                  {deliveryFilter === 'all' ? 'Todos' : deliveryFilter === 'delivery' ? 'No Delivery' : 'Ocultos'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setDeliveryFilter('all')}
+                  className={`text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
+                    deliveryFilter === 'all'
+                      ? 'bg-gray-800 text-white font-semibold'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryFilter('delivery')}
+                  className={`text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
+                    deliveryFilter === 'delivery'
+                      ? 'bg-orange-600 text-white font-semibold'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  No Delivery
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryFilter('no_delivery')}
+                  className={`text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
+                    deliveryFilter === 'no_delivery'
+                      ? 'bg-red-600 text-white font-semibold'
+                      : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Ocultos
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -637,6 +718,17 @@ export default function Produtos() {
                             {product.erpOnly && (
                               <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-1.5 py-0.5 rounded">
                                 Apenas ERP
+                              </span>
+                            )}
+                            {product.showInDelivery === false ? (
+                              <span className="text-[10px] bg-red-100 text-red-800 font-bold px-1.5 py-0.5 rounded flex items-center gap-1" title="Não aparece no cardápio de delivery">
+                                <Truck className="w-3 h-3 text-red-600" />
+                                Fora do Delivery
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-emerald-50 text-emerald-800 font-semibold px-1.5 py-0.5 rounded flex items-center gap-1" title="Visível no cardápio de delivery">
+                                <Truck className="w-3 h-3 text-emerald-600" />
+                                No Delivery
                               </span>
                             )}
                           </div>
@@ -924,17 +1016,46 @@ export default function Produtos() {
                   </div>
                 </div>
 
-                <div className="flex items-center pt-2">
-                  <input
-                    id="erpOnly"
-                    type="checkbox"
-                    checked={formData.erpOnly}
-                    onChange={(e) => setFormData({ ...formData, erpOnly: e.target.checked })}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
-                  />
-                  <label htmlFor="erpOnly" className="ml-2.5 block text-xs font-semibold text-gray-700 cursor-pointer">
-                    Exibir este produto SOMENTE no ERP (Atacado)
-                  </label>
+                <div className="space-y-3 pt-2">
+                  <div className="bg-orange-50/70 border border-orange-200 rounded-xl p-3.5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-orange-100 rounded-lg text-orange-700 shrink-0">
+                        <Truck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-xs sm:text-sm font-bold text-gray-800 block">
+                          Aparecer no cardápio de Delivery
+                        </span>
+                        <span className="text-[11px] text-gray-500 block">
+                          {formData.showInDelivery
+                            ? 'Este produto aparecerá para pedidos de entrega no PDV e no Cardápio Digital.'
+                            : 'Oculto: este produto NÃO aparecerá no cardápio de delivery.'}
+                        </span>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                      <input
+                        type="checkbox"
+                        checked={formData.showInDelivery}
+                        onChange={(e) => setFormData({ ...formData, showInDelivery: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center px-1">
+                    <input
+                      id="erpOnly"
+                      type="checkbox"
+                      checked={formData.erpOnly}
+                      onChange={(e) => setFormData({ ...formData, erpOnly: e.target.checked })}
+                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
+                    />
+                    <label htmlFor="erpOnly" className="ml-2.5 block text-xs font-semibold text-gray-700 cursor-pointer">
+                      Exibir este produto SOMENTE no ERP (Atacado)
+                    </label>
+                  </div>
                 </div>
               </div>
 

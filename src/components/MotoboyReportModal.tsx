@@ -20,9 +20,16 @@ import {
   Phone,
   RefreshCw,
   Copy,
-  Check
+  Check,
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  EyeOff,
+  Eye,
+  CheckSquare,
+  Square
 } from 'lucide-react';
-import { format, isToday, parseISO, isYesterday, subDays, startOfDay, endOfDay } from 'date-fns';
+import { format, parseISO, subDays } from 'date-fns';
 import { executePrint } from '../lib/printHelper';
 import { useStoreSettings } from '../contexts/StoreSettingsContext';
 
@@ -70,7 +77,7 @@ export default function MotoboyReportModal({
   currentSessionId,
   onOrderDeleted
 }: MotoboyReportModalProps) {
-  const { storeName, whatsappNumber } = useStoreSettings();
+  const { storeName } = useStoreSettings();
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -81,6 +88,10 @@ export default function MotoboyReportModal({
   const [paymentFilter, setPaymentFilter] = useState<string>('todos');
   const [motoboyName, setMotoboyName] = useState('');
   const [motoboyPhone, setMotoboyPhone] = useState('');
+
+  // Exclusion set: Deliveries deselected from this report before sending
+  const [excludedOrderIds, setExcludedOrderIds] = useState<Set<string>>(new Set());
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
 
   // Confirmation & Feedback
   const [orderToDelete, setOrderToDelete] = useState<DeliveryOrder | null>(null);
@@ -122,6 +133,11 @@ export default function MotoboyReportModal({
 
     return () => unsubscribe();
   }, [isOpen]);
+
+  // Reset exclusions when the user changes main date or payment filters
+  useEffect(() => {
+    setExcludedOrderIds(new Set());
+  }, [periodFilter, customDate, paymentFilter]);
 
   const showNotification = (msg: string) => {
     setSuccessToast(msg);
@@ -177,7 +193,33 @@ export default function MotoboyReportModal({
     });
   }, [orders, periodFilter, customDate, currentSessionId, paymentFilter, searchTerm]);
 
-  // Financial calculations for motoboy settlement
+  // Active orders selected to be included in the settlement/WhatsApp/Print
+  const activeOrders = useMemo(() => {
+    return filteredOrders.filter((ord) => !excludedOrderIds.has(ord.id));
+  }, [filteredOrders, excludedOrderIds]);
+
+  // Toggle single order inclusion in report
+  const toggleOrderInclusion = (id: string) => {
+    setExcludedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAllOrders = () => {
+    setExcludedOrderIds(new Set());
+  };
+
+  const deselectAllOrders = () => {
+    setExcludedOrderIds(new Set(filteredOrders.map((o) => o.id)));
+  };
+
+  // Financial calculations for motoboy settlement (based on active/included orders)
   const stats = useMemo(() => {
     let totalFees = 0;
     let totalSales = 0;
@@ -185,7 +227,7 @@ export default function MotoboyReportModal({
     let totalCard = 0;
     let totalPix = 0;
 
-    filteredOrders.forEach((ord) => {
+    activeOrders.forEach((ord) => {
       totalFees += Number(ord.deliveryFee) || 0;
       totalSales += Number(ord.total) || 0;
 
@@ -205,12 +247,12 @@ export default function MotoboyReportModal({
     });
 
     // Settlement: Cash collected by motoboy minus delivery fees owed to motoboy
-    // If > 0: motoboy owes the restaurant
-    // If < 0: restaurant owes the motoboy
+    // If > 0: motoboy passes cash to restaurant
+    // If < 0: restaurant pays the motoboy
     const netBalance = totalCash - totalFees;
 
     return {
-      count: filteredOrders.length,
+      count: activeOrders.length,
       totalFees,
       totalSales,
       totalCash,
@@ -218,15 +260,15 @@ export default function MotoboyReportModal({
       totalPix,
       netBalance
     };
-  }, [filteredOrders]);
+  }, [activeOrders]);
 
-  // Delete an order permanently
+  // Delete an order permanently from Firestore
   const confirmDeleteOrder = async () => {
     if (!orderToDelete) return;
     setIsDeleting(true);
     try {
       await deleteDoc(doc(db, 'orders', orderToDelete.id));
-      showNotification(`Pedido #${orderToDelete.password || ''} de ${orderToDelete.customerName || 'Cliente'} excluído com sucesso.`);
+      showNotification(`Pedido #${orderToDelete.password || ''} de ${orderToDelete.customerName || 'Cliente'} excluído permanentemente.`);
       onOrderDeleted?.(orderToDelete.id);
       setOrderToDelete(null);
     } catch (err: any) {
@@ -252,10 +294,14 @@ export default function MotoboyReportModal({
       msg += `👤 *Motoboy:* ${motoboyName.trim()}\n`;
     }
     msg += `📅 *Data / Período:* ${displayDate}\n`;
-    msg += `📦 *Total de Corridas Realizadas:* ${stats.count}\n\n`;
+    msg += `📦 *Total de Corridas no Acerto:* ${activeOrders.length}\n`;
+    if (excludedOrderIds.size > 0) {
+      msg += `ℹ️ _(${excludedOrderIds.size} entrega(s) desmarcada(s) deste fechamento)_\n`;
+    }
+    msg += `\n`;
 
     msg += `📋 *DETALHAMENTO DAS ENTREGAS:*\n`;
-    filteredOrders.forEach((ord, index) => {
+    activeOrders.forEach((ord, index) => {
       const timeStr = ord.closedAt || ord.createdAt ? format(parseISO(ord.closedAt || ord.createdAt), 'HH:mm') : '--:--';
       const pgto = ord.paymentMethod ? ord.paymentMethod.toUpperCase() : 'N/D';
       const fee = Number(ord.deliveryFee || 0).toFixed(2).replace('.', ',');
@@ -287,6 +333,10 @@ export default function MotoboyReportModal({
   };
 
   const handleSendWhatsApp = () => {
+    if (activeOrders.length === 0) {
+      alert('Selecione pelo menos uma entrega para enviar.');
+      return;
+    }
     const text = generateWhatsAppMessage();
     let cleanPhone = motoboyPhone.replace(/\D/g, '');
     if (cleanPhone.length > 0 && !cleanPhone.startsWith('55')) {
@@ -299,6 +349,10 @@ export default function MotoboyReportModal({
   };
 
   const handleCopyWhatsApp = async () => {
+    if (activeOrders.length === 0) {
+      alert('Selecione pelo menos uma entrega para copiar.');
+      return;
+    }
     const text = generateWhatsAppMessage();
     try {
       await navigator.clipboard.writeText(text);
@@ -311,6 +365,11 @@ export default function MotoboyReportModal({
 
   // Print Motoboy Statement (Thermal 80mm or A4)
   const handlePrintMotoboyStatement = () => {
+    if (activeOrders.length === 0) {
+      alert('Selecione pelo menos uma entrega para imprimir o fechamento.');
+      return;
+    }
+
     const displayDate = periodFilter === 'hoje'
       ? format(new Date(), 'dd/MM/yyyy')
       : periodFilter === 'ontem'
@@ -319,7 +378,7 @@ export default function MotoboyReportModal({
       ? format(parseISO(customDate), 'dd/MM/yyyy')
       : format(new Date(), 'dd/MM/yyyy');
 
-    const deliveriesRows = filteredOrders.map((ord, idx) => {
+    const deliveriesRows = activeOrders.map((ord) => {
       const timeStr = ord.closedAt || ord.createdAt ? format(parseISO(ord.closedAt || ord.createdAt), 'HH:mm') : '';
       const fee = Number(ord.deliveryFee || 0).toFixed(2).replace('.', ',');
       const totalStr = Number(ord.total || 0).toFixed(2).replace('.', ',');
@@ -358,53 +417,38 @@ export default function MotoboyReportModal({
             padding: 8px;
             font-size: 12px;
             color: #000;
-            font-weight: bold;
           }
           .center { text-align: center; }
-          .right { text-align: right; }
-          .divider { border-top: 1px dashed #000; margin: 8px 0; }
-          table { width: 100%; border-collapse: collapse; }
-          th { text-align: left; font-size: 11px; border-bottom: 1px solid #000; padding-bottom: 4px; }
-          .box {
-            border: 1px solid #000;
-            padding: 8px;
-            margin: 8px 0;
-            background: #fff;
-          }
-          .signatures {
-            margin-top: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-          }
-          .sign-line {
-            border-top: 1px solid #000;
-            text-align: center;
-            padding-top: 4px;
-            font-size: 11px;
-          }
+          .bold { font-weight: bold; }
+          .header { border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
+          .section-title { font-size: 13px; font-weight: bold; margin: 10px 0 4px 0; border-bottom: 1px solid #000; padding-bottom: 2px; }
+          table { width: 100%; border-collapse: collapse; font-size: 11px; }
+          th { border-bottom: 1px solid #000; text-align: left; padding: 3px 0; }
+          .totals-box { border: 1px solid #000; padding: 6px; margin: 10px 0; font-size: 12px; }
+          .row { display: flex; justify-content: space-between; margin: 3px 0; }
+          .saldo-box { border: 2px solid #000; padding: 6px; margin-top: 8px; text-align: center; font-size: 14px; font-weight: bold; }
+          .signatures { margin-top: 25px; padding-top: 10px; display: flex; flex-direction: column; gap: 20px; text-align: center; font-size: 11px; }
+          .sign-line { border-top: 1px dashed #000; padding-top: 4px; width: 85%; margin: 0 auto; }
           @media print {
-            body { max-width: none; width: 100%; padding: 0; }
+            body { max-width: 100%; padding: 0; }
           }
         </style>
       </head>
       <body>
-        <div class="center">
-          <h2 style="margin: 0; font-size: 16px;">${storeName || 'ALAMBARI DEFUMADOS'}</h2>
-          <div style="font-size: 13px; margin: 4px 0;">ACERTO / TAXAS DO MOTOBOY</div>
-          ${motoboyName ? `<div style="font-size: 12px;">MOTOBOY: <strong>${motoboyName.toUpperCase()}</strong></div>` : ''}
-          <div style="font-size: 11px; color: #333;">Data do Fechamento: ${displayDate}</div>
-          <div style="font-size: 10px; color: #555;">Emissão: ${format(new Date(), 'dd/MM/yyyy HH:mm')}</div>
+        <div class="header center">
+          <h2 style="margin: 0; font-size: 16px;">${(storeName || 'ALAMBARI DEFUMADOS').toUpperCase()}</h2>
+          <div style="font-size: 13px; font-weight: bold; margin: 4px 0;">FECHAMENTO DE TAXAS (MOTOBOY)</div>
+          <div>Data: ${displayDate}</div>
+          ${motoboyName ? `<div style="font-size: 13px; font-weight: bold; margin-top: 3px;">MOTOBOY: ${motoboyName.toUpperCase()}</div>` : ''}
         </div>
 
-        <div class="divider"></div>
-
+        <div class="section-title">ENTREGAS REALIZADAS (${activeOrders.length})</div>
         <table>
           <thead>
             <tr>
-              <th>CORRIDA / CLIENTE</th>
-              <th style="text-align: center;">PGTO</th>
-              <th class="right">VALOR / TAXA</th>
+              <th>Pedido / Cliente</th>
+              <th style="text-align: center;">Pgto</th>
+              <th style="text-align: right;">Valores</th>
             </tr>
           </thead>
           <tbody>
@@ -412,42 +456,34 @@ export default function MotoboyReportModal({
           </tbody>
         </table>
 
-        <div class="divider"></div>
-
-        <div class="box">
-          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-            <span>Qtd. de Corridas:</span>
-            <strong>${stats.count} entregas</strong>
+        <div class="totals-box">
+          <div class="row">
+            <span>Total Entregas Realizadas:</span>
+            <strong>${activeOrders.length} corridas</strong>
           </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-            <span>Total Taxas Motoboy:</span>
+          <div class="row">
+            <span>Total Taxas do Motoboy:</span>
             <strong>R$ ${stats.totalFees.toFixed(2).replace('.', ',')}</strong>
           </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-            <span>Dinheiro Cobrado em Mãos:</span>
+          <div class="row">
+            <span>Dinheiro em Mãos (Cobrado):</span>
             <strong>R$ ${stats.totalCash.toFixed(2).replace('.', ',')}</strong>
           </div>
-          <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 11px;">
-            <span>Pagos no Cartão / PIX:</span>
+          <div class="row" style="color: #444; font-size: 11px;">
+            <span>Cartão / PIX (Direto Loja):</span>
             <span>R$ ${(stats.totalCard + stats.totalPix).toFixed(2).replace('.', ',')}</span>
           </div>
+        </div>
 
-          <div class="divider"></div>
-
-          <div style="font-size: 14px; margin-top: 4px;">
-            ${stats.netBalance > 0 ? `
-              <div style="color: #000;">
-                MOTOBOY REPASSA AO CAIXA:<br/>
-                <span style="font-size: 18px; font-weight: 900;">R$ ${stats.netBalance.toFixed(2).replace('.', ',')}</span>
-              </div>
-            ` : stats.netBalance < 0 ? `
-              <div style="color: #000;">
-                CAIXA PAGA AO MOTOBOY:<br/>
-                <span style="font-size: 18px; font-weight: 900;">R$ ${Math.abs(stats.netBalance).toFixed(2).replace('.', ',')}</span>
-              </div>
-            ` : `
-              <div style="color: #000;">ACERTO EQUILIBRADO (R$ 0,00)</div>
-            `}
+        <div class="saldo-box">
+          <div style="font-size: 11px; font-weight: normal; margin-bottom: 2px;">ACERTO FINAL DO FECHAMENTO:</div>
+          <div>
+            ${stats.netBalance > 0
+              ? `MOTOBOY REPASSA AO CAIXA:<br/><span style="font-size: 18px;">R$ ${stats.netBalance.toFixed(2).replace('.', ',')}</span>`
+              : stats.netBalance < 0
+              ? `CAIXA PAGA AO MOTOBOY:<br/><span style="font-size: 18px;">R$ ${Math.abs(stats.netBalance).toFixed(2).replace('.', ',')}</span>`
+              : `ACERTO EQUILIBRADO (R$ 0,00)`
+            }
           </div>
         </div>
 
@@ -476,13 +512,37 @@ export default function MotoboyReportModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-xs">
-      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-gray-200">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4 backdrop-blur-xs overflow-y-auto">
+      {/* High-contrast tactile scrollbar style */}
+      <style>{`
+        .motoboy-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: #ea580c #f1f5f9;
+        }
+        .motoboy-scroll::-webkit-scrollbar {
+          width: 10px;
+          height: 10px;
+        }
+        .motoboy-scroll::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 8px;
+        }
+        .motoboy-scroll::-webkit-scrollbar-thumb {
+          background: #ea580c;
+          border-radius: 8px;
+          border: 2px solid #f1f5f9;
+        }
+        .motoboy-scroll::-webkit-scrollbar-thumb:hover {
+          background: #c2410c;
+        }
+      `}</style>
+
+      <div className="bg-white rounded-2xl max-w-4xl w-full h-[92vh] max-h-[92vh] flex flex-col shadow-2xl border border-gray-200 min-h-0 overflow-hidden my-auto">
         
         {/* Modal Header */}
-        <div className="p-4 sm:p-5 border-b bg-gradient-to-r from-orange-600 via-orange-500 to-amber-600 text-white flex items-center justify-between">
+        <div className="shrink-0 p-3.5 sm:p-4 border-b bg-gradient-to-r from-orange-600 via-orange-500 to-amber-600 text-white flex items-center justify-between shadow-xs">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 shadow-xs">
               <Truck className="w-6 h-6 text-white" />
             </div>
             <div>
@@ -490,13 +550,13 @@ export default function MotoboyReportModal({
                 Relatório de Taxas do Motoboy
               </h2>
               <p className="text-xs text-orange-100 font-medium">
-                Controle de entregas, fechamento de taxas e conferência de dinheiro cobrado
+                Selecione as entregas, confira os valores em mãos e gere o acerto
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-white/80 hover:text-white hover:bg-white/20 rounded-xl transition-colors cursor-pointer"
+            className="p-2 text-white/80 hover:text-white hover:bg-white/20 rounded-xl transition-colors cursor-pointer"
             title="Fechar"
           >
             <X className="w-6 h-6" />
@@ -505,15 +565,15 @@ export default function MotoboyReportModal({
 
         {/* Toast feedback */}
         {successToast && (
-          <div className="bg-emerald-600 text-white text-xs font-bold py-2 px-4 flex items-center justify-center gap-2 animate-fade-in shadow-inner">
+          <div className="shrink-0 bg-emerald-600 text-white text-xs font-bold py-2 px-4 flex items-center justify-center gap-2 shadow-inner">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{successToast}</span>
           </div>
         )}
 
         {/* Filter Toolbar */}
-        <div className="p-3.5 sm:p-4 bg-gray-50 border-b border-gray-200 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="shrink-0 p-3 sm:p-3.5 bg-gray-50 border-b border-gray-200 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             {/* Period selector buttons */}
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-[11px] font-bold uppercase text-gray-500 mr-1">Período:</span>
@@ -573,7 +633,7 @@ export default function MotoboyReportModal({
                     : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                Data Específica
+                Data
               </button>
 
               {periodFilter === 'custom' && (
@@ -605,13 +665,13 @@ export default function MotoboyReportModal({
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-1">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-0.5">
             {/* Search */}
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Buscar por cliente, endereço, região ou senha..."
+                placeholder="Buscar cliente, endereço, região ou senha..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-gray-300 bg-white outline-none focus:border-orange-500 font-medium"
@@ -632,190 +692,319 @@ export default function MotoboyReportModal({
                 <option value="pix">PIX</option>
                 <option value="multiplo">Múltiplo</option>
               </select>
+
+              {/* Toggle summary button */}
+              <button
+                type="button"
+                onClick={() => setIsSummaryExpanded(!isSummaryExpanded)}
+                className="px-2.5 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 flex items-center gap-1 cursor-pointer"
+                title={isSummaryExpanded ? "Recolher cards de resumo" : "Expandir cards de resumo"}
+              >
+                {isSummaryExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                <span className="hidden sm:inline">{isSummaryExpanded ? 'Resumo' : 'Resumo'}</span>
+              </button>
             </div>
           </div>
         </div>
 
         {/* Financial KPI Summary Cards */}
-        <div className="p-3.5 sm:p-4 bg-orange-50/50 border-b border-orange-100">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            {/* Card 1: Entregas */}
-            <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
-              <span className="text-[10px] uppercase font-bold text-gray-500 block">Total de Entregas</span>
-              <div className="text-xl sm:text-2xl font-black text-gray-900 mt-0.5">
-                {stats.count} <span className="text-xs font-semibold text-gray-500">corridas</span>
+        {isSummaryExpanded ? (
+          <div className="shrink-0 p-3 sm:p-3.5 bg-orange-50/50 border-b border-orange-100">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {/* Card 1: Entregas Selecionadas */}
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-gray-200 shadow-2xs">
+                <span className="text-[10px] uppercase font-bold text-gray-500 block">Corridas no Acerto</span>
+                <div className="text-lg sm:text-2xl font-black text-gray-900 mt-0.5">
+                  {stats.count} <span className="text-xs font-semibold text-gray-500">de {filteredOrders.length}</span>
+                </div>
+                <span className="text-[10px] text-gray-400">Total: R$ {stats.totalSales.toFixed(2).replace('.', ',')}</span>
               </div>
-              <span className="text-[10px] text-gray-400">Total vendido: R$ {stats.totalSales.toFixed(2).replace('.', ',')}</span>
-            </div>
 
-            {/* Card 2: Total Taxas Motoboy */}
-            <div className="bg-gradient-to-br from-orange-50 to-amber-50 p-3 rounded-xl border border-orange-300 shadow-2xs">
-              <span className="text-[10px] uppercase font-black text-orange-800 block">Taxas a Repassar (Motoboy)</span>
-              <div className="text-xl sm:text-2xl font-black text-orange-600 mt-0.5">
-                R$ {stats.totalFees.toFixed(2).replace('.', ',')}
+              {/* Card 2: Total Taxas Motoboy */}
+              <div className="bg-gradient-to-br from-orange-50 to-amber-50 p-2.5 sm:p-3 rounded-xl border border-orange-300 shadow-2xs">
+                <span className="text-[10px] uppercase font-black text-orange-800 block">Taxas a Repassar</span>
+                <div className="text-lg sm:text-2xl font-black text-orange-600 mt-0.5">
+                  R$ {stats.totalFees.toFixed(2).replace('.', ',')}
+                </div>
+                <span className="text-[10px] text-orange-800/80 font-medium">Ganhos do motoboy</span>
               </div>
-              <span className="text-[10px] text-orange-800/80 font-medium">Ganhos do motoboy</span>
-            </div>
 
-            {/* Card 3: Dinheiro Cobrado em Mãos */}
-            <div className="bg-white p-3 rounded-xl border border-emerald-200 shadow-2xs">
-              <span className="text-[10px] uppercase font-bold text-emerald-800 block">Dinheiro Cobrado em Mãos</span>
-              <div className="text-xl sm:text-2xl font-black text-emerald-700 mt-0.5">
-                R$ {stats.totalCash.toFixed(2).replace('.', ',')}
+              {/* Card 3: Dinheiro Cobrado em Mãos */}
+              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-emerald-200 shadow-2xs">
+                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Dinheiro em Mãos</span>
+                <div className="text-lg sm:text-2xl font-black text-emerald-700 mt-0.5">
+                  R$ {stats.totalCash.toFixed(2).replace('.', ',')}
+                </div>
+                <span className="text-[10px] text-gray-500">Cartão/PIX: R$ {(stats.totalCard + stats.totalPix).toFixed(2).replace('.', ',')}</span>
               </div>
-              <span className="text-[10px] text-gray-500">Cartão/PIX: R$ {(stats.totalCard + stats.totalPix).toFixed(2).replace('.', ',')}</span>
-            </div>
 
-            {/* Card 4: Saldo do Fechamento (Acerto) */}
-            <div className={`p-3 rounded-xl border shadow-2xs ${
-              stats.netBalance > 0
-                ? 'bg-blue-50 border-blue-300 text-blue-900'
-                : stats.netBalance < 0
-                ? 'bg-purple-50 border-purple-300 text-purple-900'
-                : 'bg-gray-50 border-gray-300 text-gray-900'
-            }`}>
-              <span className="text-[10px] uppercase font-black block">
-                {stats.netBalance > 0
-                  ? 'Motoboy Repassa ao Caixa'
+              {/* Card 4: Saldo do Fechamento (Acerto) */}
+              <div className={`p-2.5 sm:p-3 rounded-xl border shadow-2xs ${
+                stats.netBalance > 0
+                  ? 'bg-blue-50 border-blue-300 text-blue-900'
                   : stats.netBalance < 0
-                  ? 'Caixa Paga ao Motoboy'
-                  : 'Acerto Equilibrado'}
-              </span>
-              <div className="text-xl sm:text-2xl font-black mt-0.5">
-                R$ {Math.abs(stats.netBalance).toFixed(2).replace('.', ',')}
+                  ? 'bg-purple-50 border-purple-300 text-purple-900'
+                  : 'bg-gray-50 border-gray-300 text-gray-900'
+              }`}>
+                <span className="text-[10px] uppercase font-black block">
+                  {stats.netBalance > 0
+                    ? 'Motoboy Repassa ao Caixa'
+                    : stats.netBalance < 0
+                    ? 'Caixa Paga ao Motoboy'
+                    : 'Acerto Equilibrado'}
+                </span>
+                <div className="text-lg sm:text-2xl font-black mt-0.5">
+                  R$ {Math.abs(stats.netBalance).toFixed(2).replace('.', ',')}
+                </div>
+                <span className="text-[10px] font-semibold opacity-80">
+                  {stats.netBalance > 0
+                    ? `(Recebeu ${stats.totalCash.toFixed(2)} - Taxas ${stats.totalFees.toFixed(2)})`
+                    : stats.netBalance < 0
+                    ? `(Taxas ${stats.totalFees.toFixed(2)} - Dinheiro ${stats.totalCash.toFixed(2)})`
+                    : 'Valores quitados'}
+                </span>
               </div>
-              <span className="text-[10px] font-semibold opacity-80">
-                {stats.netBalance > 0
-                  ? `(Dinheiro ${stats.totalCash.toFixed(2)} - Taxas ${stats.totalFees.toFixed(2)})`
-                  : stats.netBalance < 0
-                  ? `(Taxas ${stats.totalFees.toFixed(2)} - Dinheiro ${stats.totalCash.toFixed(2)})`
-                  : 'Valores em dia'}
-              </span>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="shrink-0 px-3 py-2 bg-orange-50/70 border-b border-orange-100 flex items-center justify-between text-xs font-bold text-gray-700 flex-wrap gap-2">
+            <div>
+              <span>Corridas: <strong>{stats.count} de {filteredOrders.length}</strong></span>
+              <span className="mx-2 text-gray-300">•</span>
+              <span>Taxas: <strong className="text-orange-600">R$ {stats.totalFees.toFixed(2).replace('.', ',')}</strong></span>
+              <span className="mx-2 text-gray-300">•</span>
+              <span>Dinheiro: <strong className="text-emerald-700">R$ {stats.totalCash.toFixed(2).replace('.', ',')}</strong></span>
+            </div>
+            <div className="text-right">
+              <span>Acerto: </span>
+              <strong className={stats.netBalance > 0 ? 'text-blue-700' : stats.netBalance < 0 ? 'text-purple-700' : 'text-gray-700'}>
+                {stats.netBalance > 0 ? `Motoboy Repassa R$ ${stats.netBalance.toFixed(2).replace('.', ',')}` : stats.netBalance < 0 ? `Caixa Paga R$ ${Math.abs(stats.netBalance).toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
+              </strong>
+            </div>
+          </div>
+        )}
 
-        {/* Deliveries List / Table */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-4">
+        {/* Deliveries List / Table - Flexible Scrollable Area */}
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 motoboy-scroll">
           {loading ? (
-            <div className="text-center py-12 text-gray-500 flex flex-col items-center gap-2">
+            <div className="text-center py-16 text-gray-500 flex flex-col items-center gap-2">
               <RefreshCw className="w-6 h-6 animate-spin text-orange-500" />
-              <span>Carregando histórico de entregas...</span>
+              <span className="font-medium text-sm">Carregando histórico de entregas...</span>
             </div>
           ) : filteredOrders.length === 0 ? (
-            <div className="text-center py-12 text-gray-500 space-y-2">
-              <Truck className="w-10 h-10 text-gray-300 mx-auto" />
-              <p className="font-bold text-gray-700">Nenhuma entrega encontrada para o filtro selecionado.</p>
+            <div className="text-center py-16 text-gray-500 space-y-2">
+              <Truck className="w-12 h-12 text-gray-300 mx-auto" />
+              <p className="font-bold text-gray-700 text-base">Nenhuma entrega encontrada para o filtro selecionado.</p>
               <p className="text-xs text-gray-400">Verifique a data ou altere os filtros de busca acima.</p>
             </div>
           ) : (
-            <div className="space-y-2.5">
-              {filteredOrders.map((ord) => {
-                const timeStr = ord.closedAt || ord.createdAt
-                  ? format(parseISO(ord.closedAt || ord.createdAt), 'dd/MM HH:mm')
-                  : '--:--';
-                const isCash = ord.paymentMethod === 'dinheiro';
-                const isCard = ord.paymentMethod === 'cartao';
-                const isPix = ord.paymentMethod === 'pix';
-                const isMulti = ord.paymentMethod === 'multiplo';
+            <div className="space-y-3">
+              {/* Batch selection and count helper */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-gray-100 bg-white sticky top-0 z-10 py-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-orange-600" />
+                    Entregas no Fechamento:
+                  </span>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-900 border border-orange-200">
+                    {activeOrders.length} de {filteredOrders.length} selecionadas
+                  </span>
+                  {excludedOrderIds.size > 0 && (
+                    <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                      ({excludedOrderIds.size} excluída{excludedOrderIds.size > 1 ? 's' : ''} do envio)
+                    </span>
+                  )}
+                </div>
 
-                return (
-                  <div
-                    key={ord.id}
-                    className="p-3 bg-white rounded-xl border border-gray-200 hover:border-orange-300 hover:shadow-xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                <div className="flex items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={selectAllOrders}
+                    disabled={excludedOrderIds.size === 0}
+                    className="font-bold text-orange-600 hover:text-orange-800 disabled:opacity-40 disabled:hover:text-orange-600 cursor-pointer transition-colors"
                   >
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-800 flex items-center justify-center font-black text-xs shrink-0 mt-0.5">
-                        #{ord.password || ord.id.slice(-4)}
+                    Marcar Todas
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={deselectAllOrders}
+                    disabled={activeOrders.length === 0}
+                    className="font-bold text-gray-500 hover:text-gray-800 disabled:opacity-40 disabled:hover:text-gray-500 cursor-pointer transition-colors"
+                  >
+                    Desmarcar Todas
+                  </button>
+                </div>
+              </div>
+
+              {/* Order Cards List */}
+              <div className="space-y-2.5">
+                {filteredOrders.map((ord) => {
+                  const isIncluded = !excludedOrderIds.has(ord.id);
+                  const timeStr = ord.closedAt || ord.createdAt
+                    ? format(parseISO(ord.closedAt || ord.createdAt), 'dd/MM HH:mm')
+                    : '--:--';
+                  const isCash = ord.paymentMethod === 'dinheiro';
+                  const isCard = ord.paymentMethod === 'cartao';
+                  const isPix = ord.paymentMethod === 'pix';
+                  const isMulti = ord.paymentMethod === 'multiplo';
+
+                  return (
+                    <div
+                      key={ord.id}
+                      className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isIncluded
+                          ? 'bg-white border-gray-200 hover:border-orange-300 hover:shadow-xs'
+                          : 'bg-gray-50/80 border-dashed border-gray-300 opacity-60'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        {/* Checkbox button to toggle inclusion */}
+                        <button
+                          type="button"
+                          onClick={() => toggleOrderInclusion(ord.id)}
+                          className={`w-6 h-6 rounded-md border flex items-center justify-center transition-all cursor-pointer shrink-0 mt-1 ${
+                            isIncluded
+                              ? 'bg-orange-600 border-orange-600 text-white shadow-2xs'
+                              : 'bg-white border-gray-300 text-transparent hover:border-orange-400'
+                          }`}
+                          title={isIncluded ? 'Clique para excluir do envio' : 'Clique para incluir no envio'}
+                        >
+                          <Check className="w-4 h-4 stroke-[3]" />
+                        </button>
+
+                        {/* Order identifier */}
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shrink-0 mt-0.5 ${
+                          isIncluded ? 'bg-orange-100 text-orange-800' : 'bg-gray-200 text-gray-500'
+                        }`}>
+                          #{ord.password || ord.id.slice(-4)}
+                        </div>
+
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm text-gray-900 truncate">
+                              {ord.customerName || 'Cliente sem nome'}
+                            </span>
+                            <span className="text-[11px] text-gray-400 flex items-center gap-1 font-medium">
+                              <Clock className="w-3 h-3" /> {timeStr}
+                            </span>
+                            {ord.status === 'open' && (
+                              <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full">
+                                Pendente / Em Aberto
+                              </span>
+                            )}
+                            {!isIncluded && (
+                              <span className="text-[10px] font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <EyeOff className="w-3 h-3" /> Excluído deste fechamento
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="text-xs text-gray-600 flex items-center gap-1.5 flex-wrap">
+                            {ord.deliveryRegion && (
+                              <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-800 font-bold px-2 py-0.5 rounded text-[11px]">
+                                <MapPin className="w-3 h-3 text-orange-600" />
+                                {ord.deliveryRegion}
+                              </span>
+                            )}
+                            <span className="truncate" title={ord.deliveryAddress}>
+                              {ord.deliveryAddress || 'Endereço não informado'}
+                            </span>
+                            {ord.deliveryPhone && (
+                              <span className="text-gray-400 text-[11px]">
+                                • {ord.deliveryPhone}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="flex-1 min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-sm text-gray-900 truncate">
-                            {ord.customerName || 'Cliente sem nome'}
-                          </span>
-                          <span className="text-[11px] text-gray-400 flex items-center gap-1 font-medium">
-                            <Clock className="w-3 h-3" /> {timeStr}
-                          </span>
-                          {ord.status === 'open' && (
-                            <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full">
-                              Pendente / Em Aberto
+                      {/* Financial Values & Actions */}
+                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                        {/* Payment Method Badge */}
+                        <span className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 ${
+                          isCash
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : isCard
+                            ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                            : isPix
+                            ? 'bg-purple-50 text-purple-800 border border-purple-200'
+                            : 'bg-teal-50 text-teal-800 border border-teal-200'
+                        }`}>
+                          {isCash && <Banknote className="w-3.5 h-3.5" />}
+                          {isCard && <CreditCard className="w-3.5 h-3.5" />}
+                          {isPix && <QrCode className="w-3.5 h-3.5" />}
+                          {isMulti && <Wallet className="w-3.5 h-3.5" />}
+                          <span>{(ord.paymentMethod || 'Outro').toUpperCase()}</span>
+                        </span>
+
+                        {/* Amounts */}
+                        <div className="text-right min-w-[110px]">
+                          <div className="text-xs text-gray-500 font-medium">
+                            Pedido: <strong className="text-gray-800">R$ {Number(ord.total || 0).toFixed(2).replace('.', ',')}</strong>
+                          </div>
+                          <div className="text-sm font-black text-orange-600 flex items-center gap-1 justify-end">
+                            <span>Taxa:</span>
+                            <span className="bg-orange-100 text-orange-900 px-1.5 py-0.2 rounded font-extrabold">
+                              R$ {Number(ord.deliveryFee || 0).toFixed(2).replace('.', ',')}
                             </span>
-                          )}
+                          </div>
                         </div>
 
-                        <div className="text-xs text-gray-600 flex items-center gap-1.5 flex-wrap">
-                          {ord.deliveryRegion && (
-                            <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-800 font-bold px-2 py-0.5 rounded text-[11px]">
-                              <MapPin className="w-3 h-3 text-orange-600" />
-                              {ord.deliveryRegion}
-                            </span>
+                        {/* Action: Excluir/Reincluir do Fechamento antes de enviar */}
+                        <button
+                          type="button"
+                          onClick={() => toggleOrderInclusion(ord.id)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+                            isIncluded
+                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
+                              : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}
+                          title={isIncluded ? 'Excluir esta entrega do relatório antes de enviar' : 'Reincluir entrega no relatório'}
+                        >
+                          {isIncluded ? (
+                            <>
+                              <EyeOff className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Excluir do Envio</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Reincluir</span>
+                            </>
                           )}
-                          <span className="truncate" title={ord.deliveryAddress}>
-                            {ord.deliveryAddress || 'Endereço não informado'}
-                          </span>
-                          {ord.deliveryPhone && (
-                            <span className="text-gray-400 text-[11px]">
-                              • {ord.deliveryPhone}
-                            </span>
-                          )}
-                        </div>
+                        </button>
+
+                        {/* Action: Excluir Pedido Definitivamente do Sistema */}
+                        <button
+                          type="button"
+                          onClick={() => setOrderToDelete(ord)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          title="Excluir pedido definitivamente do banco de dados"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-
-                    {/* Financial Values & Actions */}
-                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-                      {/* Payment Method Badge */}
-                      <span className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 ${
-                        isCash
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : isCard
-                          ? 'bg-blue-50 text-blue-800 border border-blue-200'
-                          : isPix
-                          ? 'bg-purple-50 text-purple-800 border border-purple-200'
-                          : 'bg-teal-50 text-teal-800 border border-teal-200'
-                      }`}>
-                        {isCash && <Banknote className="w-3.5 h-3.5" />}
-                        {isCard && <CreditCard className="w-3.5 h-3.5" />}
-                        {isPix && <QrCode className="w-3.5 h-3.5" />}
-                        {isMulti && <Wallet className="w-3.5 h-3.5" />}
-                        <span>{(ord.paymentMethod || 'Outro').toUpperCase()}</span>
-                      </span>
-
-                      {/* Amounts */}
-                      <div className="text-right">
-                        <div className="text-xs text-gray-500 font-medium">
-                          Pedido: <strong className="text-gray-800">R$ {Number(ord.total || 0).toFixed(2).replace('.', ',')}</strong>
-                        </div>
-                        <div className="text-sm font-black text-orange-600 flex items-center gap-1 justify-end">
-                          <span>Taxa:</span>
-                          <span className="bg-orange-100 text-orange-900 px-1.5 py-0.2 rounded font-extrabold">
-                            R$ {Number(ord.deliveryFee || 0).toFixed(2).replace('.', ',')}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Delete action button */}
-                      <button
-                        type="button"
-                        onClick={() => setOrderToDelete(ord)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                        title="Excluir este pedido"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
 
         {/* Modal Footer / Actions */}
-        <div className="p-3.5 sm:p-4 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
-          <div className="text-xs text-gray-500 font-medium text-center sm:text-left">
-            Total filtrado: <strong>{filteredOrders.length} entregas</strong> • Taxas: <strong>R$ {stats.totalFees.toFixed(2).replace('.', ',')}</strong>
+        <div className="shrink-0 p-3 sm:p-4 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shadow-inner">
+          <div className="text-xs text-gray-600 font-medium text-center sm:text-left">
+            <span>Envio selecionado: </span>
+            <strong className="text-gray-900">{activeOrders.length} de {filteredOrders.length} corridas</strong>
+            <span className="mx-1.5">•</span>
+            <span>Taxas: <strong className="text-orange-600">R$ {stats.totalFees.toFixed(2).replace('.', ',')}</strong></span>
+            {excludedOrderIds.size > 0 && (
+              <span className="text-amber-700 ml-1.5 font-bold">
+                ({excludedOrderIds.size} excluída{excludedOrderIds.size > 1 ? 's' : ''})
+              </span>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 flex-wrap">
@@ -823,9 +1012,9 @@ export default function MotoboyReportModal({
             <button
               type="button"
               onClick={handleCopyWhatsApp}
-              disabled={filteredOrders.length === 0}
+              disabled={activeOrders.length === 0}
               className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-              title="Copiar texto do fechamento"
+              title="Copiar texto do fechamento selecionado"
             >
               {copiedWhatsapp ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-gray-600" />}
               <span>{copiedWhatsapp ? 'Copiado!' : 'Copiar Texto'}</span>
@@ -835,9 +1024,9 @@ export default function MotoboyReportModal({
             <button
               type="button"
               onClick={handleSendWhatsApp}
-              disabled={filteredOrders.length === 0}
+              disabled={activeOrders.length === 0}
               className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-              title="Enviar extrato de taxas diretamente no WhatsApp do motoboy"
+              title="Enviar extrato de taxas das corridas selecionadas no WhatsApp do motoboy"
             >
               <MessageCircle className="w-4 h-4" />
               <span>Enviar no WhatsApp</span>
@@ -847,9 +1036,9 @@ export default function MotoboyReportModal({
             <button
               type="button"
               onClick={handlePrintMotoboyStatement}
-              disabled={filteredOrders.length === 0}
+              disabled={activeOrders.length === 0}
               className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
-              title="Imprimir extrato do motoboy em impressora térmica ou padrão"
+              title="Imprimir extrato das corridas selecionadas para o motoboy"
             >
               <Printer className="w-4 h-4" />
               <span>Imprimir Acerto</span>
@@ -857,10 +1046,10 @@ export default function MotoboyReportModal({
           </div>
         </div>
 
-        {/* Confirmation Modal to Delete Order */}
+        {/* Confirmation Modal to Delete Order Permanently */}
         {orderToDelete && (
           <div className="fixed inset-0 bg-black/70 z-60 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 border border-red-200 animate-scale-in">
+            <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 border border-red-200">
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-600">
                 <AlertTriangle className="w-6 h-6" />
               </div>
@@ -869,28 +1058,27 @@ export default function MotoboyReportModal({
                 <p className="text-xs text-gray-600 leading-relaxed">
                   Deseja realmente excluir o pedido <strong>#{orderToDelete.password || orderToDelete.id.slice(-4)}</strong> de <strong>{orderToDelete.customerName || 'Cliente'}</strong>?
                 </p>
-                <div className="bg-red-50 p-2.5 rounded-lg text-xs font-semibold text-red-800 text-left mt-2 border border-red-100">
-                  • Total: R$ {Number(orderToDelete.total || 0).toFixed(2).replace('.', ',')}<br/>
-                  • Taxa: R$ {Number(orderToDelete.deliveryFee || 0).toFixed(2).replace('.', ',')}<br/>
-                  • Esta ação não pode ser desfeita.
-                </div>
+                <p className="text-[11px] text-red-600 font-semibold bg-red-50 p-2 rounded-lg mt-2">
+                  Esta ação não pode ser desfeita. O pedido será removido permanentemente do banco de dados.
+                </p>
               </div>
-              <div className="flex gap-2 pt-1">
+
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
-                  onClick={() => setOrderToDelete(null)}
                   disabled={isDeleting}
-                  className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                  onClick={() => setOrderToDelete(null)}
+                  className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="button"
-                  onClick={confirmDeleteOrder}
                   disabled={isDeleting}
-                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                  onClick={confirmDeleteOrder}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-3.5 h-3.5" />
                   <span>{isDeleting ? 'Excluindo...' : 'Sim, Excluir'}</span>
                 </button>
               </div>

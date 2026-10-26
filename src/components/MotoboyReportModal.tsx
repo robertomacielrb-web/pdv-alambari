@@ -9,10 +9,6 @@ import {
   Trash2,
   X,
   MessageCircle,
-  Banknote,
-  CreditCard,
-  QrCode,
-  Wallet,
   CheckCircle2,
   AlertTriangle,
   MapPin,
@@ -25,9 +21,8 @@ import {
   ChevronDown,
   ChevronUp,
   EyeOff,
-  Eye,
-  CheckSquare,
-  Square
+  Coins,
+  Receipt
 } from 'lucide-react';
 import { format, parseISO, subDays } from 'date-fns';
 import { executePrint } from '../lib/printHelper';
@@ -85,7 +80,6 @@ export default function MotoboyReportModal({
   const [periodFilter, setPeriodFilter] = useState<'hoje' | 'caixa_atual' | 'ontem' | '7dias' | 'custom'>('hoje');
   const [customDate, setCustomDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [searchTerm, setSearchTerm] = useState('');
-  const [paymentFilter, setPaymentFilter] = useState<string>('todos');
   const [motoboyName, setMotoboyName] = useState('');
   const [motoboyPhone, setMotoboyPhone] = useState('');
 
@@ -134,10 +128,10 @@ export default function MotoboyReportModal({
     return () => unsubscribe();
   }, [isOpen]);
 
-  // Reset exclusions when the user changes main date or payment filters
+  // Reset exclusions when the user changes main date
   useEffect(() => {
     setExcludedOrderIds(new Set());
-  }, [periodFilter, customDate, paymentFilter]);
+  }, [periodFilter, customDate]);
 
   const showNotification = (msg: string) => {
     setSuccessToast(msg);
@@ -146,7 +140,7 @@ export default function MotoboyReportModal({
     }, 3500);
   };
 
-  // Filter orders by period, search and payment
+  // Filter orders by period and search
   const filteredOrders = useMemo(() => {
     const now = new Date();
     const todayStr = format(now, 'yyyy-MM-dd');
@@ -171,12 +165,7 @@ export default function MotoboyReportModal({
         if (orderDayStr !== customDate) return false;
       }
 
-      // 2. Payment filter
-      if (paymentFilter !== 'todos') {
-        if (order.paymentMethod !== paymentFilter) return false;
-      }
-
-      // 3. Search filter
+      // 2. Search filter
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
         const matchesClient = (order.customerName || '').toLowerCase().includes(term);
@@ -191,9 +180,9 @@ export default function MotoboyReportModal({
 
       return true;
     });
-  }, [orders, periodFilter, customDate, currentSessionId, paymentFilter, searchTerm]);
+  }, [orders, periodFilter, customDate, currentSessionId, searchTerm]);
 
-  // Active orders selected to be included in the settlement/WhatsApp/Print
+  // Active orders selected to be included in the fee report / WhatsApp / Print
   const activeOrders = useMemo(() => {
     return filteredOrders.filter((ord) => !excludedOrderIds.has(ord.id));
   }, [filteredOrders, excludedOrderIds]);
@@ -219,46 +208,25 @@ export default function MotoboyReportModal({
     setExcludedOrderIds(new Set(filteredOrders.map((o) => o.id)));
   };
 
-  // Financial calculations for motoboy settlement (based on active/included orders)
+  // Calculations for Motoboy Delivery Fees (EXCLUSIVELY fees, no product sales values)
   const stats = useMemo(() => {
     let totalFees = 0;
-    let totalSales = 0;
-    let totalCash = 0;
-    let totalCard = 0;
-    let totalPix = 0;
+    let maxFee = 0;
 
     activeOrders.forEach((ord) => {
-      totalFees += Number(ord.deliveryFee) || 0;
-      totalSales += Number(ord.total) || 0;
-
-      if (ord.paymentMethod === 'dinheiro') {
-        totalCash += Number(ord.total) || 0;
-      } else if (ord.paymentMethod === 'cartao') {
-        totalCard += Number(ord.total) || 0;
-      } else if (ord.paymentMethod === 'pix') {
-        totalPix += Number(ord.total) || 0;
-      } else if (ord.paymentMethod === 'multiplo' && Array.isArray(ord.splitPayments)) {
-        ord.splitPayments.forEach((p) => {
-          if (p.method === 'dinheiro') totalCash += Number(p.amount) || 0;
-          if (p.method === 'cartao') totalCard += Number(p.amount) || 0;
-          if (p.method === 'pix') totalPix += Number(p.amount) || 0;
-        });
-      }
+      const fee = Number(ord.deliveryFee) || 0;
+      totalFees += fee;
+      if (fee > maxFee) maxFee = fee;
     });
 
-    // Settlement: Cash collected by motoboy minus delivery fees owed to motoboy
-    // If > 0: motoboy passes cash to restaurant
-    // If < 0: restaurant pays the motoboy
-    const netBalance = totalCash - totalFees;
+    const count = activeOrders.length;
+    const avgFee = count > 0 ? totalFees / count : 0;
 
     return {
-      count: activeOrders.length,
+      count,
       totalFees,
-      totalSales,
-      totalCash,
-      totalCard,
-      totalPix,
-      netBalance
+      avgFee,
+      maxFee,
     };
   }, [activeOrders]);
 
@@ -279,7 +247,7 @@ export default function MotoboyReportModal({
     }
   };
 
-  // Generate WhatsApp text for motoboy
+  // Generate WhatsApp text for motoboy - ONLY DELIVERY FEES
   const generateWhatsAppMessage = () => {
     const displayDate = periodFilter === 'hoje'
       ? format(new Date(), 'dd/MM/yyyy')
@@ -289,46 +257,32 @@ export default function MotoboyReportModal({
       ? format(parseISO(customDate), 'dd/MM/yyyy')
       : format(new Date(), 'dd/MM/yyyy');
 
-    let msg = `🛵 *${(storeName || 'ALAMBARI DEFUMADOS').toUpperCase()} - ACERTO DO MOTOBOY* 🛵\n`;
+    let msg = `🛵 *${(storeName || 'ALAMBARI DEFUMADOS').toUpperCase()} - RELATÓRIO DE TAXAS DO MOTOBOY* 🛵\n`;
     if (motoboyName.trim()) {
       msg += `👤 *Motoboy:* ${motoboyName.trim()}\n`;
     }
-    msg += `📅 *Data / Período:* ${displayDate}\n`;
-    msg += `📦 *Total de Corridas no Acerto:* ${activeOrders.length}\n`;
+    msg += `📅 *Data:* ${displayDate}\n`;
+    msg += `📦 *Total de Corridas:* ${activeOrders.length}\n`;
     if (excludedOrderIds.size > 0) {
       msg += `ℹ️ _(${excludedOrderIds.size} entrega(s) desmarcada(s) deste fechamento)_\n`;
     }
-    msg += `\n`;
+    msg += `\n📋 *TAXAS POR ENTREGA:*\n`;
 
-    msg += `📋 *DETALHAMENTO DAS ENTREGAS:*\n`;
     activeOrders.forEach((ord, index) => {
       const timeStr = ord.closedAt || ord.createdAt ? format(parseISO(ord.closedAt || ord.createdAt), 'HH:mm') : '--:--';
-      const pgto = ord.paymentMethod ? ord.paymentMethod.toUpperCase() : 'N/D';
       const fee = Number(ord.deliveryFee || 0).toFixed(2).replace('.', ',');
-      const ordTotal = Number(ord.total || 0).toFixed(2).replace('.', ',');
-      const reg = ord.deliveryRegion || 'Padrão';
-      msg += `${index + 1}. *#${ord.password || ord.id.slice(-4)}* (${timeStr}) - ${ord.customerName || 'Cliente'}\n`;
-      msg += `   📍 ${reg} | Pgto: *${pgto}*\n`;
-      msg += `   💵 Taxa Motoboy: *R$ ${fee}* | Total Pedido: R$ ${ordTotal}\n\n`;
+      const reg = ord.deliveryRegion || ord.deliveryAddress || 'Entrega';
+      const client = ord.customerName ? ` (${ord.customerName})` : '';
+
+      msg += `${index + 1}. *#${ord.password || ord.id.slice(-4)}* [${timeStr}] - ${reg}${client}\n`;
+      msg += `   💵 *Taxa: R$ ${fee}*\n\n`;
     });
 
-    msg += `📊 *RESUMO FINANCEIRO DO ACERTO:*\n`;
-    msg += `• Total das Taxas de Entrega: *R$ ${stats.totalFees.toFixed(2).replace('.', ',')}*\n`;
-    msg += `• Dinheiro Cobrado em Mãos: *R$ ${stats.totalCash.toFixed(2).replace('.', ',')}*\n`;
-    msg += `• Pedidos em Cartão / PIX: R$ ${(stats.totalCard + stats.totalPix).toFixed(2).replace('.', ',')}\n\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `💰 *TOTAL DE TAXAS A RECEBER: R$ ${stats.totalFees.toFixed(2).replace('.', ',')}*\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `\nObrigado pelo excelente trabalho! 🤝`;
 
-    msg += `💰 *SALDO FINAL DO FECHAMENTO:*\n`;
-    if (stats.netBalance > 0) {
-      msg += `👉 *O MOTOBOY REPASSA AO CAIXA:* *R$ ${stats.netBalance.toFixed(2).replace('.', ',')}*\n`;
-      msg += `_(Recebeu R$ ${stats.totalCash.toFixed(2).replace('.', ',')} em dinheiro - R$ ${stats.totalFees.toFixed(2).replace('.', ',')} de suas taxas)_\n`;
-    } else if (stats.netBalance < 0) {
-      msg += `👉 *O CAIXA PAGA AO MOTOBOY:* *R$ ${Math.abs(stats.netBalance).toFixed(2).replace('.', ',')}*\n`;
-      msg += `_(Taxas devidas superam o dinheiro cobrado em mãos)_\n`;
-    } else {
-      msg += `👉 *ACERTO EQUILIBRADO / ZERADO (R$ 0,00)*\n`;
-    }
-
-    msg += `\nQualquer dúvida estamos à disposição! Obrigado pelo excelente trabalho! 🤝`;
     return msg;
   };
 
@@ -363,7 +317,7 @@ export default function MotoboyReportModal({
     }
   };
 
-  // Print Motoboy Statement (Thermal 80mm or A4)
+  // Print Motoboy Statement (Thermal 80mm or standard) - ONLY DELIVERY FEES
   const handlePrintMotoboyStatement = () => {
     if (activeOrders.length === 0) {
       alert('Selecione pelo menos uma entrega para imprimir o fechamento.');
@@ -378,25 +332,19 @@ export default function MotoboyReportModal({
       ? format(parseISO(customDate), 'dd/MM/yyyy')
       : format(new Date(), 'dd/MM/yyyy');
 
-    const deliveriesRows = activeOrders.map((ord) => {
+    const deliveriesRows = activeOrders.map((ord, idx) => {
       const timeStr = ord.closedAt || ord.createdAt ? format(parseISO(ord.closedAt || ord.createdAt), 'HH:mm') : '';
       const fee = Number(ord.deliveryFee || 0).toFixed(2).replace('.', ',');
-      const totalStr = Number(ord.total || 0).toFixed(2).replace('.', ',');
-      const pgto = (ord.paymentMethod || 'OUTRO').toUpperCase();
 
       return `
         <tr>
-          <td style="padding: 4px 0; border-bottom: 1px dotted #ccc;">
-            <strong>#${ord.password || ord.id.slice(-4)}</strong> (${timeStr})<br/>
-            ${ord.customerName || 'Cliente'}<br/>
-            <small style="color: #444;">${ord.deliveryRegion || ord.deliveryAddress || ''}</small>
+          <td style="padding: 5px 0; border-bottom: 1px dotted #ccc;">
+            <strong>${idx + 1}. #${ord.password || ord.id.slice(-4)}</strong> [${timeStr}]<br/>
+            ${ord.customerName ? `<span>${ord.customerName}</span><br/>` : ''}
+            <small style="color: #444;">${ord.deliveryRegion || ord.deliveryAddress || 'Local'}</small>
           </td>
-          <td style="text-align: center; padding: 4px 0; border-bottom: 1px dotted #ccc; font-size: 11px;">
-            ${pgto}
-          </td>
-          <td style="text-align: right; padding: 4px 0; border-bottom: 1px dotted #ccc;">
-            R$ ${totalStr}<br/>
-            <strong style="color: #c2410c;">Taxa: R$ ${fee}</strong>
+          <td style="text-align: right; padding: 5px 0; border-bottom: 1px dotted #ccc; font-size: 13px; font-weight: bold; vertical-align: middle;">
+            R$ ${fee}
           </td>
         </tr>
       `;
@@ -407,7 +355,7 @@ export default function MotoboyReportModal({
       <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Fechamento Motoboy - ${motoboyName || 'Entregas'}</title>
+        <title>Taxas Motoboy - ${motoboyName || 'Extrato'}</title>
         <style>
           body {
             font-family: 'Courier New', Courier, monospace;
@@ -423,10 +371,10 @@ export default function MotoboyReportModal({
           .header { border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
           .section-title { font-size: 13px; font-weight: bold; margin: 10px 0 4px 0; border-bottom: 1px solid #000; padding-bottom: 2px; }
           table { width: 100%; border-collapse: collapse; font-size: 11px; }
-          th { border-bottom: 1px solid #000; text-align: left; padding: 3px 0; }
-          .totals-box { border: 1px solid #000; padding: 6px; margin: 10px 0; font-size: 12px; }
-          .row { display: flex; justify-content: space-between; margin: 3px 0; }
-          .saldo-box { border: 2px solid #000; padding: 6px; margin-top: 8px; text-align: center; font-size: 14px; font-weight: bold; }
+          th { border-bottom: 1px solid #000; text-align: left; padding: 4px 0; }
+          .totals-box { border: 1.5px solid #000; padding: 8px; margin: 12px 0; font-size: 12px; }
+          .row { display: flex; justify-content: space-between; margin: 4px 0; }
+          .final-fee-box { border: 2px solid #000; background-color: #f9f9f9; padding: 8px; margin-top: 10px; text-align: center; font-size: 14px; font-weight: bold; }
           .signatures { margin-top: 25px; padding-top: 10px; display: flex; flex-direction: column; gap: 20px; text-align: center; font-size: 11px; }
           .sign-line { border-top: 1px dashed #000; padding-top: 4px; width: 85%; margin: 0 auto; }
           @media print {
@@ -437,18 +385,17 @@ export default function MotoboyReportModal({
       <body>
         <div class="header center">
           <h2 style="margin: 0; font-size: 16px;">${(storeName || 'ALAMBARI DEFUMADOS').toUpperCase()}</h2>
-          <div style="font-size: 13px; font-weight: bold; margin: 4px 0;">FECHAMENTO DE TAXAS (MOTOBOY)</div>
+          <div style="font-size: 13px; font-weight: bold; margin: 4px 0;">RELATÓRIO DE TAXAS DO MOTOBOY</div>
           <div>Data: ${displayDate}</div>
           ${motoboyName ? `<div style="font-size: 13px; font-weight: bold; margin-top: 3px;">MOTOBOY: ${motoboyName.toUpperCase()}</div>` : ''}
         </div>
 
-        <div class="section-title">ENTREGAS REALIZADAS (${activeOrders.length})</div>
+        <div class="section-title">ENTREGAS E TAXAS (${activeOrders.length})</div>
         <table>
           <thead>
             <tr>
-              <th>Pedido / Cliente</th>
-              <th style="text-align: center;">Pgto</th>
-              <th style="text-align: right;">Valores</th>
+              <th>Entrega / Local</th>
+              <th style="text-align: right;">Taxa</th>
             </tr>
           </thead>
           <tbody>
@@ -458,33 +405,18 @@ export default function MotoboyReportModal({
 
         <div class="totals-box">
           <div class="row">
-            <span>Total Entregas Realizadas:</span>
-            <strong>${activeOrders.length} corridas</strong>
+            <span>Total de Corridas Realizadas:</span>
+            <strong>${activeOrders.length} entregas</strong>
           </div>
-          <div class="row">
-            <span>Total Taxas do Motoboy:</span>
-            <strong>R$ ${stats.totalFees.toFixed(2).replace('.', ',')}</strong>
-          </div>
-          <div class="row">
-            <span>Dinheiro em Mãos (Cobrado):</span>
-            <strong>R$ ${stats.totalCash.toFixed(2).replace('.', ',')}</strong>
-          </div>
-          <div class="row" style="color: #444; font-size: 11px;">
-            <span>Cartão / PIX (Direto Loja):</span>
-            <span>R$ ${(stats.totalCard + stats.totalPix).toFixed(2).replace('.', ',')}</span>
+          <div class="row" style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed #000; font-size: 14px;">
+            <span>TOTAL DAS TAXAS:</span>
+            <strong style="font-size: 16px;">R$ ${stats.totalFees.toFixed(2).replace('.', ',')}</strong>
           </div>
         </div>
 
-        <div class="saldo-box">
-          <div style="font-size: 11px; font-weight: normal; margin-bottom: 2px;">ACERTO FINAL DO FECHAMENTO:</div>
-          <div>
-            ${stats.netBalance > 0
-              ? `MOTOBOY REPASSA AO CAIXA:<br/><span style="font-size: 18px;">R$ ${stats.netBalance.toFixed(2).replace('.', ',')}</span>`
-              : stats.netBalance < 0
-              ? `CAIXA PAGA AO MOTOBOY:<br/><span style="font-size: 18px;">R$ ${Math.abs(stats.netBalance).toFixed(2).replace('.', ',')}</span>`
-              : `ACERTO EQUILIBRADO (R$ 0,00)`
-            }
-          </div>
+        <div class="final-fee-box">
+          <div style="font-size: 11px; font-weight: normal; margin-bottom: 2px;">VALOR TOTAL A PAGAR AO MOTOBOY:</div>
+          <div style="font-size: 20px; font-weight: 900;">R$ ${stats.totalFees.toFixed(2).replace('.', ',')}</div>
         </div>
 
         <div class="signatures">
@@ -550,7 +482,7 @@ export default function MotoboyReportModal({
                 Relatório de Taxas do Motoboy
               </h2>
               <p className="text-xs text-orange-100 font-medium">
-                Selecione as entregas, confira os valores em mãos e gere o acerto
+                Controle exclusivo das taxas de entrega a pagar ao entregador
               </p>
             </div>
           </div>
@@ -678,108 +610,73 @@ export default function MotoboyReportModal({
               />
             </div>
 
-            {/* Payment filter */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold uppercase text-gray-500 shrink-0">Pgto:</span>
-              <select
-                value={paymentFilter}
-                onChange={(e) => setPaymentFilter(e.target.value)}
-                className="px-2.5 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white outline-none focus:border-orange-500"
-              >
-                <option value="todos">Todos Pagamentos</option>
-                <option value="dinheiro">Dinheiro</option>
-                <option value="cartao">Cartão</option>
-                <option value="pix">PIX</option>
-                <option value="multiplo">Múltiplo</option>
-              </select>
-
-              {/* Toggle summary button */}
-              <button
-                type="button"
-                onClick={() => setIsSummaryExpanded(!isSummaryExpanded)}
-                className="px-2.5 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 flex items-center gap-1 cursor-pointer"
-                title={isSummaryExpanded ? "Recolher cards de resumo" : "Expandir cards de resumo"}
-              >
-                {isSummaryExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                <span className="hidden sm:inline">{isSummaryExpanded ? 'Resumo' : 'Resumo'}</span>
-              </button>
-            </div>
+            {/* Toggle summary button */}
+            <button
+              type="button"
+              onClick={() => setIsSummaryExpanded(!isSummaryExpanded)}
+              className="px-3 py-1.5 text-xs font-bold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 flex items-center justify-center gap-1 cursor-pointer shrink-0"
+              title={isSummaryExpanded ? "Recolher cards de resumo" : "Expandir cards de resumo"}
+            >
+              {isSummaryExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              <span>{isSummaryExpanded ? 'Recolher Resumo' : 'Ver Resumo'}</span>
+            </button>
           </div>
         </div>
 
-        {/* Financial KPI Summary Cards */}
+        {/* Exclusive Delivery Fees KPI Cards */}
         {isSummaryExpanded ? (
           <div className="shrink-0 p-3 sm:p-3.5 bg-orange-50/50 border-b border-orange-100">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {/* Card 1: Entregas Selecionadas */}
-              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-gray-200 shadow-2xs">
-                <span className="text-[10px] uppercase font-bold text-gray-500 block">Corridas no Acerto</span>
-                <div className="text-lg sm:text-2xl font-black text-gray-900 mt-0.5">
-                  {stats.count} <span className="text-xs font-semibold text-gray-500">de {filteredOrders.length}</span>
+              <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
+                <span className="text-[10px] uppercase font-bold text-gray-500 block">Total de Entregas</span>
+                <div className="text-xl sm:text-2xl font-black text-gray-900 mt-0.5">
+                  {stats.count} <span className="text-xs font-semibold text-gray-500">corridas</span>
                 </div>
-                <span className="text-[10px] text-gray-400">Total: R$ {stats.totalSales.toFixed(2).replace('.', ',')}</span>
+                <span className="text-[10px] text-gray-400">
+                  {excludedOrderIds.size > 0 ? `${excludedOrderIds.size} desmarcada(s)` : 'Todas selecionadas'}
+                </span>
               </div>
 
-              {/* Card 2: Total Taxas Motoboy */}
-              <div className="bg-gradient-to-br from-orange-50 to-amber-50 p-2.5 sm:p-3 rounded-xl border border-orange-300 shadow-2xs">
-                <span className="text-[10px] uppercase font-black text-orange-800 block">Taxas a Repassar</span>
-                <div className="text-lg sm:text-2xl font-black text-orange-600 mt-0.5">
+              {/* Card 2: Total Taxas Motoboy (Destaque Principal) */}
+              <div className="bg-gradient-to-br from-orange-500 to-amber-600 text-white p-3 rounded-xl shadow-md sm:col-span-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase font-black tracking-wider text-orange-100 block flex items-center gap-1.5">
+                    <Coins className="w-4 h-4 text-orange-200" />
+                    Total de Taxas a Pagar ao Motoboy
+                  </span>
+                  <Receipt className="w-5 h-5 text-orange-200 opacity-60" />
+                </div>
+                <div className="text-2xl sm:text-3xl font-black mt-1">
                   R$ {stats.totalFees.toFixed(2).replace('.', ',')}
                 </div>
-                <span className="text-[10px] text-orange-800/80 font-medium">Ganhos do motoboy</span>
+                <span className="text-[11px] text-orange-100 font-medium">
+                  Valor líquido das {stats.count} taxas de corrida selecionadas
+                </span>
               </div>
 
-              {/* Card 3: Dinheiro Cobrado em Mãos */}
-              <div className="bg-white p-2.5 sm:p-3 rounded-xl border border-emerald-200 shadow-2xs">
-                <span className="text-[10px] uppercase font-bold text-emerald-800 block">Dinheiro em Mãos</span>
-                <div className="text-lg sm:text-2xl font-black text-emerald-700 mt-0.5">
-                  R$ {stats.totalCash.toFixed(2).replace('.', ',')}
+              {/* Card 3: Média por Corrida */}
+              <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
+                <span className="text-[10px] uppercase font-bold text-gray-500 block">Média por Entrega</span>
+                <div className="text-xl sm:text-2xl font-black text-orange-600 mt-0.5">
+                  R$ {stats.avgFee.toFixed(2).replace('.', ',')}
                 </div>
-                <span className="text-[10px] text-gray-500">Cartão/PIX: R$ {(stats.totalCard + stats.totalPix).toFixed(2).replace('.', ',')}</span>
-              </div>
-
-              {/* Card 4: Saldo do Fechamento (Acerto) */}
-              <div className={`p-2.5 sm:p-3 rounded-xl border shadow-2xs ${
-                stats.netBalance > 0
-                  ? 'bg-blue-50 border-blue-300 text-blue-900'
-                  : stats.netBalance < 0
-                  ? 'bg-purple-50 border-purple-300 text-purple-900'
-                  : 'bg-gray-50 border-gray-300 text-gray-900'
-              }`}>
-                <span className="text-[10px] uppercase font-black block">
-                  {stats.netBalance > 0
-                    ? 'Motoboy Repassa ao Caixa'
-                    : stats.netBalance < 0
-                    ? 'Caixa Paga ao Motoboy'
-                    : 'Acerto Equilibrado'}
-                </span>
-                <div className="text-lg sm:text-2xl font-black mt-0.5">
-                  R$ {Math.abs(stats.netBalance).toFixed(2).replace('.', ',')}
-                </div>
-                <span className="text-[10px] font-semibold opacity-80">
-                  {stats.netBalance > 0
-                    ? `(Recebeu ${stats.totalCash.toFixed(2)} - Taxas ${stats.totalFees.toFixed(2)})`
-                    : stats.netBalance < 0
-                    ? `(Taxas ${stats.totalFees.toFixed(2)} - Dinheiro ${stats.totalCash.toFixed(2)})`
-                    : 'Valores quitados'}
-                </span>
+                <span className="text-[10px] text-gray-400">Maior taxa: R$ {stats.maxFee.toFixed(2).replace('.', ',')}</span>
               </div>
             </div>
           </div>
         ) : (
-          <div className="shrink-0 px-3 py-2 bg-orange-50/70 border-b border-orange-100 flex items-center justify-between text-xs font-bold text-gray-700 flex-wrap gap-2">
+          <div className="shrink-0 px-4 py-2.5 bg-orange-50/80 border-b border-orange-200 flex items-center justify-between text-xs font-bold text-gray-800 flex-wrap gap-2">
             <div>
-              <span>Corridas: <strong>{stats.count} de {filteredOrders.length}</strong></span>
+              <span>Entregas Selecionadas: <strong>{stats.count} corridas</strong></span>
               <span className="mx-2 text-gray-300">•</span>
-              <span>Taxas: <strong className="text-orange-600">R$ {stats.totalFees.toFixed(2).replace('.', ',')}</strong></span>
-              <span className="mx-2 text-gray-300">•</span>
-              <span>Dinheiro: <strong className="text-emerald-700">R$ {stats.totalCash.toFixed(2).replace('.', ',')}</strong></span>
+              <span>Média: <strong>R$ {stats.avgFee.toFixed(2).replace('.', ',')}</strong></span>
             </div>
-            <div className="text-right">
-              <span>Acerto: </span>
-              <strong className={stats.netBalance > 0 ? 'text-blue-700' : stats.netBalance < 0 ? 'text-purple-700' : 'text-gray-700'}>
-                {stats.netBalance > 0 ? `Motoboy Repassa R$ ${stats.netBalance.toFixed(2).replace('.', ',')}` : stats.netBalance < 0 ? `Caixa Paga R$ ${Math.abs(stats.netBalance).toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
-              </strong>
+            <div className="flex items-center gap-1.5">
+              <span>Total a Pagar ao Motoboy:</span>
+              <span className="text-base font-black text-orange-600 bg-white px-2 py-0.5 rounded-lg border border-orange-300">
+                R$ {stats.totalFees.toFixed(2).replace('.', ',')}
+              </span>
             </div>
           </div>
         )}
@@ -789,7 +686,7 @@ export default function MotoboyReportModal({
           {loading ? (
             <div className="text-center py-16 text-gray-500 flex flex-col items-center gap-2">
               <RefreshCw className="w-6 h-6 animate-spin text-orange-500" />
-              <span className="font-medium text-sm">Carregando histórico de entregas...</span>
+              <span className="font-medium text-sm">Carregando taxas de entregas...</span>
             </div>
           ) : filteredOrders.length === 0 ? (
             <div className="text-center py-16 text-gray-500 space-y-2">
@@ -804,7 +701,7 @@ export default function MotoboyReportModal({
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-black text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-orange-600" />
-                    Entregas no Fechamento:
+                    Entregas no Relatório de Taxas:
                   </span>
                   <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-900 border border-orange-200">
                     {activeOrders.length} de {filteredOrders.length} selecionadas
@@ -837,17 +734,13 @@ export default function MotoboyReportModal({
                 </div>
               </div>
 
-              {/* Order Cards List */}
+              {/* Order Cards List - Showing ONLY delivery fees */}
               <div className="space-y-2.5">
                 {filteredOrders.map((ord) => {
                   const isIncluded = !excludedOrderIds.has(ord.id);
                   const timeStr = ord.closedAt || ord.createdAt
                     ? format(parseISO(ord.closedAt || ord.createdAt), 'dd/MM HH:mm')
                     : '--:--';
-                  const isCash = ord.paymentMethod === 'dinheiro';
-                  const isCard = ord.paymentMethod === 'cartao';
-                  const isPix = ord.paymentMethod === 'pix';
-                  const isMulti = ord.paymentMethod === 'multiplo';
 
                   return (
                     <div
@@ -868,7 +761,7 @@ export default function MotoboyReportModal({
                               ? 'bg-orange-600 border-orange-600 text-white shadow-2xs'
                               : 'bg-white border-gray-300 text-transparent hover:border-orange-400'
                           }`}
-                          title={isIncluded ? 'Clique para excluir do envio' : 'Clique para incluir no envio'}
+                          title={isIncluded ? 'Clique para excluir do relatório de taxas' : 'Clique para incluir no relatório'}
                         >
                           <Check className="w-4 h-4 stroke-[3]" />
                         </button>
@@ -895,7 +788,7 @@ export default function MotoboyReportModal({
                             )}
                             {!isIncluded && (
                               <span className="text-[10px] font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                <EyeOff className="w-3 h-3" /> Excluído deste fechamento
+                                <EyeOff className="w-3 h-3" /> Desmarcado deste relatório
                               </span>
                             )}
                           </div>
@@ -919,39 +812,19 @@ export default function MotoboyReportModal({
                         </div>
                       </div>
 
-                      {/* Financial Values & Actions */}
-                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
-                        {/* Payment Method Badge */}
-                        <span className={`px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 ${
-                          isCash
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            : isCard
-                            ? 'bg-blue-50 text-blue-800 border border-blue-200'
-                            : isPix
-                            ? 'bg-purple-50 text-purple-800 border border-purple-200'
-                            : 'bg-teal-50 text-teal-800 border border-teal-200'
-                        }`}>
-                          {isCash && <Banknote className="w-3.5 h-3.5" />}
-                          {isCard && <CreditCard className="w-3.5 h-3.5" />}
-                          {isPix && <QrCode className="w-3.5 h-3.5" />}
-                          {isMulti && <Wallet className="w-3.5 h-3.5" />}
-                          <span>{(ord.paymentMethod || 'Outro').toUpperCase()}</span>
-                        </span>
-
-                        {/* Amounts */}
-                        <div className="text-right min-w-[110px]">
-                          <div className="text-xs text-gray-500 font-medium">
-                            Pedido: <strong className="text-gray-800">R$ {Number(ord.total || 0).toFixed(2).replace('.', ',')}</strong>
-                          </div>
-                          <div className="text-sm font-black text-orange-600 flex items-center gap-1 justify-end">
-                            <span>Taxa:</span>
-                            <span className="bg-orange-100 text-orange-900 px-1.5 py-0.2 rounded font-extrabold">
-                              R$ {Number(ord.deliveryFee || 0).toFixed(2).replace('.', ',')}
-                            </span>
-                          </div>
+                      {/* Financial Value (ONLY DELIVERY FEE) & Actions */}
+                      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                        {/* Only Delivery Fee Amount */}
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase font-bold text-gray-400 block">
+                            Taxa da Corrida
+                          </span>
+                          <span className="text-base sm:text-lg font-black text-orange-600 bg-orange-50 border border-orange-200 px-3 py-0.5 rounded-lg inline-block">
+                            R$ {Number(ord.deliveryFee || 0).toFixed(2).replace('.', ',')}
+                          </span>
                         </div>
 
-                        {/* Action: Excluir/Reincluir do Fechamento antes de enviar */}
+                        {/* Action: Excluir/Reincluir do Relatório de Taxas antes de enviar */}
                         <button
                           type="button"
                           onClick={() => toggleOrderInclusion(ord.id)}
@@ -960,7 +833,7 @@ export default function MotoboyReportModal({
                               ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
                               : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
                           }`}
-                          title={isIncluded ? 'Excluir esta entrega do relatório antes de enviar' : 'Reincluir entrega no relatório'}
+                          title={isIncluded ? 'Excluir esta taxa do relatório antes de enviar' : 'Reincluir taxa no relatório'}
                         >
                           {isIncluded ? (
                             <>
@@ -993,16 +866,22 @@ export default function MotoboyReportModal({
           )}
         </div>
 
-        {/* Modal Footer / Actions */}
+        {/* Modal Footer / Actions - Strictly Focused on Delivery Fees */}
         <div className="shrink-0 p-3 sm:p-4 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shadow-inner">
-          <div className="text-xs text-gray-600 font-medium text-center sm:text-left">
-            <span>Envio selecionado: </span>
-            <strong className="text-gray-900">{activeOrders.length} de {filteredOrders.length} corridas</strong>
-            <span className="mx-1.5">•</span>
-            <span>Taxas: <strong className="text-orange-600">R$ {stats.totalFees.toFixed(2).replace('.', ',')}</strong></span>
+          <div className="text-xs text-gray-700 font-medium text-center sm:text-left flex items-center gap-2 justify-center sm:justify-start">
+            <span>
+              Total a Pagar ao Motoboy:{" "}
+              <strong className="text-orange-600 text-sm font-black">
+                R$ {stats.totalFees.toFixed(2).replace('.', ',')}
+              </strong>
+            </span>
+            <span className="text-gray-300">•</span>
+            <span>
+              <strong>{activeOrders.length}</strong> de {filteredOrders.length} corridas
+            </span>
             {excludedOrderIds.size > 0 && (
-              <span className="text-amber-700 ml-1.5 font-bold">
-                ({excludedOrderIds.size} excluída{excludedOrderIds.size > 1 ? 's' : ''})
+              <span className="text-amber-700 font-bold">
+                ({excludedOrderIds.size} desmarcada{excludedOrderIds.size > 1 ? 's' : ''})
               </span>
             )}
           </div>
@@ -1014,10 +893,10 @@ export default function MotoboyReportModal({
               onClick={handleCopyWhatsApp}
               disabled={activeOrders.length === 0}
               className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-              title="Copiar texto do fechamento selecionado"
+              title="Copiar texto com apenas as taxas do motoboy"
             >
               {copiedWhatsapp ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-gray-600" />}
-              <span>{copiedWhatsapp ? 'Copiado!' : 'Copiar Texto'}</span>
+              <span>{copiedWhatsapp ? 'Copiado!' : 'Copiar Taxas'}</span>
             </button>
 
             {/* Send to WhatsApp */}
@@ -1026,10 +905,10 @@ export default function MotoboyReportModal({
               onClick={handleSendWhatsApp}
               disabled={activeOrders.length === 0}
               className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-              title="Enviar extrato de taxas das corridas selecionadas no WhatsApp do motoboy"
+              title="Enviar lista de taxas das corridas selecionadas no WhatsApp do motoboy"
             >
               <MessageCircle className="w-4 h-4" />
-              <span>Enviar no WhatsApp</span>
+              <span>Enviar Taxas no WhatsApp</span>
             </button>
 
             {/* Print Statement */}
@@ -1038,10 +917,10 @@ export default function MotoboyReportModal({
               onClick={handlePrintMotoboyStatement}
               disabled={activeOrders.length === 0}
               className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
-              title="Imprimir extrato das corridas selecionadas para o motoboy"
+              title="Imprimir relatório exclusivo de taxas para o motoboy"
             >
               <Printer className="w-4 h-4" />
-              <span>Imprimir Acerto</span>
+              <span>Imprimir Taxas</span>
             </button>
           </div>
         </div>

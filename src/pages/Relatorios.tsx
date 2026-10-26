@@ -24,7 +24,9 @@ import {
   BarChart2,
   PieChart as PieChartIcon,
   Download,
+  Bike,
 } from "lucide-react";
+import MotoboyReportModal from "../components/MotoboyReportModal";
 import {
   format,
   parseISO,
@@ -94,6 +96,7 @@ export default function Relatorios() {
   const [sessions, setSessions] = useState<CashierSession[]>([]);
   const [products, setProducts] = useState<Record<string, string>>({}); // id -> category
   const [loading, setLoading] = useState(false);
+  const [isMotoboyModalOpen, setIsMotoboyModalOpen] = useState(false);
 
   useEffect(() => {
     // Fetch products once to map categories
@@ -347,7 +350,14 @@ export default function Relatorios() {
           Relatórios e Análises
         </h1>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setIsMotoboyModalOpen(true)}
+            className="flex items-center bg-orange-600 hover:bg-orange-700 text-white rounded-md px-4 py-1.5 shadow-sm transition-colors font-bold text-sm"
+          >
+            <Bike className="w-4 h-4 mr-2" />
+            Taxas Motoboy
+          </button>
           <button
             onClick={handleExportCSV}
             className="flex items-center bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md px-4 py-1.5 shadow-sm transition-colors font-medium text-sm"
@@ -788,6 +798,12 @@ export default function Relatorios() {
           </div>
         </>
       )}
+
+      {/* Modal de Relatório de Taxas do Motoboy */}
+      <MotoboyReportModal
+        isOpen={isMotoboyModalOpen}
+        onClose={() => setIsMotoboyModalOpen(false)}
+      />
     </div>
   );
 }

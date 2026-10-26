@@ -6,6 +6,7 @@ import {
   onSnapshot,
   addDoc,
   updateDoc,
+  deleteDoc,
   doc,
   increment,
 } from "firebase/firestore";
@@ -27,11 +28,14 @@ import {
   Bell,
   Scale,
   MapPin,
+  Bike,
+  AlertTriangle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
 import { executePrint } from "../lib/printHelper";
 import WeightModal, { formatKg, parseItemQuantity } from "../components/WeightModal";
+import MotoboyReportModal from "../components/MotoboyReportModal";
 import { useStoreSettings } from "../contexts/StoreSettingsContext";
 import { DEFAULT_DELIVERY_REGIONS, DeliveryRegion } from "../data/deliveryRegions";
 
@@ -84,6 +88,11 @@ export default function Delivery() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingOnlineOrders, setPendingOnlineOrders] = useState<any[]>([]);
   const [activePendingOrderId, setActivePendingOrderId] = useState<string | null>(null);
+
+  // Motoboy Report and Delete states
+  const [isMotoboyModalOpen, setIsMotoboyModalOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<any | null>(null);
+  const [isDeletingOrder, setIsDeletingOrder] = useState(false);
 
   // Weight / Kilo modal state
   const [weighingProduct, setWeighingProduct] = useState<Product | null>(null);
@@ -492,6 +501,37 @@ export default function Delivery() {
     }
   };
 
+  const handleDiscardActiveOrder = () => {
+    setActivePendingOrderId(null);
+    setCart([]);
+    setCustomerName("");
+    setAddress("");
+    setPhoneNumber("");
+    setObservations("");
+    setDeliveryFee(0);
+    setSelectedRegionId("");
+    setSelectedRegionName("");
+    setDiscount("");
+    setStep(1);
+  };
+
+  const handleConfirmDeleteOrder = async () => {
+    if (!orderToDelete) return;
+    setIsDeletingOrder(true);
+    try {
+      await deleteDoc(doc(db, "orders", orderToDelete.id));
+      if (activePendingOrderId === orderToDelete.id) {
+        handleDiscardActiveOrder();
+      }
+      setOrderToDelete(null);
+    } catch (err: any) {
+      console.error("Erro ao excluir pedido:", err);
+      alert("Não foi possível excluir o pedido: " + (err.message || "Erro desconhecido"));
+    } finally {
+      setIsDeletingOrder(false);
+    }
+  };
+
   const handleCheckout = async () => {
     if (!currentSession) {
       alert("Abra o caixa primeiro!");
@@ -627,11 +667,23 @@ export default function Delivery() {
               </div>
             </div>
 
-            {cart.length > 0 && (
-              <span className="bg-orange-100 text-orange-800 text-sm font-bold px-3 py-1 rounded-full whitespace-nowrap self-start sm:self-center">
-                {cart.reduce((acc, item) => acc + item.quantity, 0)} itens
-              </span>
-            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setIsMotoboyModalOpen(true)}
+                className="bg-orange-600 hover:bg-orange-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow-sm transition-all cursor-pointer whitespace-nowrap"
+                title="Abrir Relatório de Taxas de Entrega do Motoboy"
+              >
+                <Bike className="w-4 h-4" />
+                <span>Taxas Motoboy</span>
+              </button>
+
+              {cart.length > 0 && (
+                <span className="bg-orange-100 text-orange-800 text-sm font-bold px-3 py-1 rounded-full whitespace-nowrap self-start sm:self-center">
+                  {cart.reduce((acc, item) => acc + item.quantity, 0)} itens
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Pending Incoming Orders Alert Banner */}
@@ -645,24 +697,83 @@ export default function Delivery() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {pendingOnlineOrders.map((ord) => (
-                  <button
+                  <div
                     key={ord.id}
-                    onClick={() => handleLoadPendingOrder(ord)}
-                    className={`text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-sm ${
+                    className={`inline-flex items-center rounded-lg border shadow-xs text-xs font-bold transition-all overflow-hidden ${
                       activePendingOrderId === ord.id
-                        ? 'bg-amber-700 text-white ring-2 ring-amber-400'
-                        : 'bg-white hover:bg-amber-100 text-amber-900 border border-amber-300'
+                        ? 'bg-amber-700 text-white border-amber-800 ring-2 ring-amber-400'
+                        : 'bg-white text-amber-900 border-amber-300 hover:border-amber-400'
                     }`}
                   >
-                    <span>{ord.customerName || 'Cliente Online'}</span>
-                    <span className="font-extrabold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded text-[11px]">
-                      R$ {Number(ord.total || 0).toFixed(2).replace('.', ',')}
-                    </span>
-                    <span className="text-[10px] uppercase tracking-wider bg-amber-600 text-white px-1.5 py-0.2 rounded font-black">
-                      {activePendingOrderId === ord.id ? 'Carregado' : 'Abrir'}
-                    </span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLoadPendingOrder(ord)}
+                      className="px-3 py-1.5 flex items-center gap-1.5 hover:bg-amber-600/20 cursor-pointer"
+                    >
+                      <span>{ord.customerName || 'Cliente Online'}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[11px] font-extrabold ${
+                        activePendingOrderId === ord.id ? 'bg-amber-900 text-amber-200' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        R$ {Number(ord.total || 0).toFixed(2).replace('.', ',')}
+                      </span>
+                      <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.2 rounded font-black ${
+                        activePendingOrderId === ord.id ? 'bg-amber-900 text-white' : 'bg-amber-600 text-white'
+                      }`}>
+                        {activePendingOrderId === ord.id ? 'Carregado' : 'Abrir'}
+                      </span>
+                    </button>
+                    {/* Botão para excluir pedido que entra no delivery */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOrderToDelete(ord);
+                      }}
+                      className="px-2 py-1.5 text-red-500 hover:text-white hover:bg-red-600 border-l border-amber-200 hover:border-red-600 transition-colors cursor-pointer"
+                      title="Excluir este pedido do delivery"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Banner de Pedido em Atendimento Ativo */}
+          {activePendingOrderId && (
+            <div className="bg-orange-100/90 border-b border-orange-200 px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-orange-950 font-bold">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-orange-600 animate-pulse"></span>
+                <span>
+                  Atendendo Pedido Recebido Online de: <strong className="underline text-orange-900">{customerName || 'Cliente'}</strong>
+                  {deliveryFee > 0 && (
+                    <span className="ml-1.5 bg-orange-200 text-orange-900 px-1.5 py-0.5 rounded font-black">
+                      Taxa: R$ {Number(deliveryFee).toFixed(2).replace('.', ',')}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={handleDiscardActiveOrder}
+                  className="px-2.5 py-1 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  Descartar Edição
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentOrd = pendingOnlineOrders.find(o => o.id === activePendingOrderId) || { id: activePendingOrderId, customerName, total };
+                    setOrderToDelete(currentOrd);
+                  }}
+                  className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer shadow-xs transition-colors"
+                  title="Excluir permanentemente este pedido do delivery"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Excluir Pedido</span>
+                </button>
               </div>
             </div>
           )}
@@ -816,18 +927,34 @@ export default function Delivery() {
               <div className="flex items-center">
                 <button
                   onClick={() => setStep(1)}
-                  className="mr-4 text-gray-500 hover:text-gray-800"
+                  className="mr-4 text-gray-500 hover:text-gray-800 font-bold"
                 >
                   ← Voltar
                 </button>
                 <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                  <ShoppingCart className="w-6 h-6 mr-2" />
+                  <ShoppingCart className="w-6 h-6 mr-2 text-orange-600" />
                   Pedido
                 </h2>
               </div>
-              <span className="bg-orange-100 text-orange-800 text-sm font-bold px-3 py-1 rounded-full">
-                {cart.reduce((acc, item) => acc + item.quantity, 0)} itens
-              </span>
+              <div className="flex items-center gap-2">
+                {activePendingOrderId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentOrd = pendingOnlineOrders.find(o => o.id === activePendingOrderId) || { id: activePendingOrderId, customerName, total };
+                      setOrderToDelete(currentOrd);
+                    }}
+                    className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Excluir este pedido permanentemente do delivery"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Excluir Pedido</span>
+                  </button>
+                )}
+                <span className="bg-orange-100 text-orange-800 text-sm font-bold px-3 py-1 rounded-full">
+                  {cart.reduce((acc, item) => acc + item.quantity, 0)} itens
+                </span>
+              </div>
             </div>
 
             <div className="p-4 sm:p-6">
@@ -1270,6 +1397,20 @@ export default function Delivery() {
                 <CheckCircle className="w-6 h-6 mr-2" />
                 {isProcessing ? "Lançando..." : "Lançar Entrega"}
               </button>
+
+              {activePendingOrderId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const found = pendingOnlineOrders.find((o) => o.id === activePendingOrderId) || { id: activePendingOrderId, customerName: customerName || "Pedido Atual" };
+                    setOrderToDelete(found);
+                  }}
+                  className="w-full mt-2 py-2.5 px-4 rounded-xl font-bold text-xs uppercase tracking-wider text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Recusar / Excluir Este Pedido
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1359,6 +1500,68 @@ export default function Delivery() {
         }}
         onConfirm={handleConfirmWeight}
       />
+
+      {/* Modal de Confirmação para Excluir Pedido */}
+      {orderToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100">
+            <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-black text-gray-900 text-center mb-2">
+              Excluir Pedido de Delivery?
+            </h3>
+            <p className="text-sm text-gray-600 text-center mb-4">
+              Tem certeza que deseja excluir permanentemente o pedido de{" "}
+              <strong className="text-gray-900">
+                {orderToDelete.customerName || "Cliente"}
+              </strong>
+              {orderToDelete.password ? ` (#${orderToDelete.password})` : ""}?
+              Essa ação não pode ser desfeita.
+            </p>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 mb-6 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                O pedido será removido do banco de dados e sumirá das pendências e relatórios.
+              </span>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                disabled={isDeletingOrder}
+                onClick={() => setOrderToDelete(null)}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingOrder}
+                onClick={handleConfirmDeleteOrder}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-md transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                {isDeletingOrder ? "Excluindo..." : "Sim, Excluir"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Relatório de Taxas do Motoboy */}
+      <MotoboyReportModal
+        isOpen={isMotoboyModalOpen}
+        onClose={() => setIsMotoboyModalOpen(false)}
+        currentSessionId={currentSession?.id}
+        onOrderDeleted={(deletedId) => {
+          if (activePendingOrderId === deletedId) {
+            handleDiscardActiveOrder();
+          }
+        }}
+      />
     </div>
   );
 }
+

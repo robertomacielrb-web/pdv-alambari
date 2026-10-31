@@ -69,6 +69,7 @@ interface Order {
   customerName?: string;
   customerPhone?: string;
   observations?: string;
+  discount?: number;
 }
 
 interface CashierSession {
@@ -675,6 +676,195 @@ export default function Mesas() {
     window.open(whatsappUrl, "_blank");
   };
 
+  const handlePrintTablePreBill = (targetOrder?: Order | null) => {
+    let orderToPrint: any = null;
+
+    if (targetOrder) {
+      if (!targetOrder.items || targetOrder.items.length === 0) {
+        alert("Esta mesa não possui nenhum item para imprimir conta!");
+        return;
+      }
+      orderToPrint = {
+        type: "mesa",
+        status: "open",
+        tableNumber: targetOrder.tableNumber,
+        customerName: targetOrder.customerName || "",
+        customerPhone: targetOrder.customerPhone || "",
+        observations: targetOrder.observations || "",
+        items: targetOrder.items.map((item: any) => ({
+          productId: item.id || item.productId || "unknown",
+          name: item.name || "Produto",
+          price: parsedPrice(item.price),
+          quantity: Number(item.quantity) || 1,
+          unit: item.unit || "unidade",
+          observation: item.observation || "",
+        })),
+        total: Number(targetOrder.total) || 0,
+        discount: Number(targetOrder.discount) || 0,
+        createdAt: targetOrder.createdAt || new Date().toISOString(),
+        isPreBill: true,
+        isPreConta: true,
+      };
+    } else {
+      if (!selectedTable || cart.length === 0) {
+        alert("Adicione pelo menos um item ao consumo da mesa para imprimir a conta!");
+        return;
+      }
+      orderToPrint = {
+        type: "mesa",
+        status: "open",
+        tableNumber: selectedTable,
+        customerName: customerName || "",
+        customerPhone: customerPhone || "",
+        observations: observations || "",
+        items: cart.map((item) => ({
+          productId: item.id || "unknown",
+          name: item.name || "Produto",
+          price: parsedPrice(item.price),
+          quantity: Number(item.quantity) || 1,
+          unit: item.unit || "unidade",
+          observation: item.observation || "",
+        })),
+        subtotal: subtotal,
+        discount: Number(discount) || 0,
+        total: total,
+        createdAt: new Date().toISOString(),
+        isPreBill: true,
+        isPreConta: true,
+      };
+    }
+
+    const itemsHtml = orderToPrint.items
+      .map((item: any) => {
+        const isKg = item.unit === "kg" || (item.name && item.name.toLowerCase().includes("/kg"));
+        const qtyText = isKg
+          ? `${Number(item.quantity).toFixed(3).replace(".", ",")} kg`
+          : `${item.quantity}x`;
+        const itemPrice = parsedPrice(item.price);
+        const subTotalText = (itemPrice * Number(item.quantity)).toFixed(2).replace(".", ",");
+        return `
+          <tr>
+            <td style="padding: 6px 0; border-bottom: 1px dotted #e5e7eb;">
+              <span style="font-weight: bold; font-size: 14px;">${item.name}</span>
+              <div style="font-size: 12px; color: #4b5563; margin-top: 2px;">
+                ${qtyText} ${isKg ? `(a R$ ${itemPrice.toFixed(2).replace(".", ",")}/kg)` : `x R$ ${itemPrice.toFixed(2).replace(".", ",")}`}
+              </div>
+              ${item.observation ? `<div style="font-size: 11px; font-style: italic; color: #6b7280; margin-top: 2px;">Obs: ${item.observation}</div>` : ""}
+            </td>
+            <td style="text-align: right; padding: 6px 0; font-weight: bold; font-size: 14px; border-bottom: 1px dotted #e5e7eb; vertical-align: top;">
+              R$ ${subTotalText}
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const orderSubtotal = orderToPrint.subtotal !== undefined
+      ? orderToPrint.subtotal
+      : orderToPrint.total + (orderToPrint.discount || 0);
+
+    const content = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Pré-Conta - Mesa ${orderToPrint.tableNumber}</title>
+          <style>
+            html, body { margin: 0; padding: 0; box-sizing: border-box; background: #fff; }
+            body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 80mm; margin: 0 auto; padding: 12px; font-size: 13px; color: #000; }
+            .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
+            .badge { display: inline-block; font-size: 12px; font-weight: bold; border: 1px solid #000; padding: 3px 8px; border-radius: 4px; margin-top: 4px; text-transform: uppercase; }
+            .table-title { font-size: 26px; font-weight: 900; margin: 8px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+            .totals-box { border-top: 2px dashed #000; margin-top: 10px; padding-top: 8px; }
+            .total-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+            .grand-total { display: flex; justify-content: space-between; font-size: 18px; font-weight: 900; margin-top: 8px; padding-top: 6px; border-top: 1px solid #000; }
+            .info-box { border: 1px dashed #000; padding: 8px; margin-top: 12px; text-align: center; font-size: 11px; }
+            .footer { text-align: center; border-top: 1px dashed #000; padding-top: 10px; margin-top: 12px; font-size: 11px; }
+            
+            .no-print { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 15px; padding: 10px; background: #f3f4f6; border-radius: 8px; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+            .btn { flex: 1; padding: 12px 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center; font-size: 14px; font-family: sans-serif; }
+            .btn-print { background: #16a34a; color: white; }
+            .btn-close { background: #dc2626; color: white; }
+            
+            @media print { 
+              @page { margin: 0; margin-top: 2mm; margin-bottom: 2mm; }
+              .no-print { display: none !important; }
+              body { width: 100%; max-width: none; padding: 0; margin: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="no-print">
+            <button class="btn btn-close" onclick="window.close()">✕ Fechar</button>
+            <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir Pré-Conta</button>
+          </div>
+
+          <div class="header">
+            <h2 style="margin: 0; font-size: 18px;">PDV ALAMBARI DEFUMADOS</h2>
+            <div class="badge">Conferência de Conta (Pré-Conta)</div>
+            <p style="margin: 4px 0 0 0; font-size: 10px; font-style: italic;">* NÃO É DOCUMENTO FISCAL *</p>
+            <div class="table-title">MESA ${orderToPrint.tableNumber}</div>
+            <p style="margin: 3px 0; font-size: 11px;">Data/Hora: ${format(new Date(), "dd/MM/yyyy HH:mm")}</p>
+            ${orderToPrint.customerName ? `<p style="margin: 3px 0; font-size: 13px; font-weight: bold;">Cliente: ${orderToPrint.customerName}</p>` : ""}
+            ${orderToPrint.customerPhone ? `<p style="margin: 2px 0; font-size: 11px;">Fone: ${orderToPrint.customerPhone}</p>` : ""}
+            ${orderToPrint.observations ? `<p style="margin: 4px 0; font-size: 11px; font-weight: bold;">Obs: ${orderToPrint.observations}</p>` : ""}
+          </div>
+
+          <table>
+            <thead>
+              <tr style="border-bottom: 1px solid #000;">
+                <th style="text-align: left; padding-bottom: 4px; font-size: 12px;">ITEM / QUANTIDADE</th>
+                <th style="text-align: right; padding-bottom: 4px; font-size: 12px;">VALOR</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+
+          <div class="totals-box">
+            ${orderToPrint.discount && orderToPrint.discount > 0 ? `
+              <div class="total-row">
+                <span>Subtotal:</span>
+                <span>R$ ${orderSubtotal.toFixed(2).replace(".", ",")}</span>
+              </div>
+              <div class="total-row" style="color: #dc2626;">
+                <span>Desconto Concedido:</span>
+                <span>- R$ ${Number(orderToPrint.discount).toFixed(2).replace(".", ",")}</span>
+              </div>
+            ` : ""}
+            <div class="grand-total">
+              <span>TOTAL A PAGAR:</span>
+              <span>R$ ${Number(orderToPrint.total).toFixed(2).replace(".", ",")}</span>
+            </div>
+          </div>
+
+          <div class="info-box">
+            <strong>CONTA EM ABERTO PARA CONFERÊNCIA</strong><br>
+            Aguardando fechamento e pagamento.<br>
+            <span>Aceitamos: Dinheiro, Cartão e PIX</span>
+          </div>
+
+          <div class="footer">
+            <p style="margin: 2px 0;">Favor conferir os itens antes de pagar.</p>
+            <p style="margin: 2px 0; font-weight: bold;">Agradecemos a preferência! Volte sempre!</p>
+          </div>
+
+          <script>
+            setTimeout(() => { 
+              window.print(); 
+              setTimeout(() => { window.close(); }, 500);
+            }, 300);
+          </script>
+        </body>
+      </html>
+    `;
+
+    executePrint(orderToPrint, content, { customerOnly: true });
+  };
+
   const handlePrint = (order: any) => {
     const itemsHtml = order.items
       .map(
@@ -971,11 +1161,19 @@ export default function Mesas() {
               key={`table-wrapper-${table.number}-${index}`}
               className="relative group animate-[fadeIn_0.3s_ease-out]"
             >
-              <motion.button
-                whileTap={{ scale: 0.95 }}
+              <motion.div
+                whileTap={{ scale: 0.98 }}
                 id={`table-card-${table.number}`}
                 onClick={() => openTableModal(table.number)}
-                className={`w-full p-6 rounded-lg shadow flex flex-col items-center justify-center transition-transform hover:scale-105 min-h-[140px] ${
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openTableModal(table.number);
+                  }
+                }}
+                className={`w-full p-6 rounded-lg shadow flex flex-col items-center justify-center transition-transform hover:scale-105 min-h-[140px] cursor-pointer select-none ${
                   isOpen
                     ? "bg-red-600 text-white"
                     : "bg-white text-gray-800 hover:bg-gray-50"
@@ -995,9 +1193,21 @@ export default function Mesas() {
                     <span className="text-xs mt-1 bg-red-700 px-2 py-1 rounded text-white shadow-sm font-bold">
                       R$ {order.total.toFixed(2).replace(".", ",")}
                     </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePrintTablePreBill(order);
+                      }}
+                      title={`Imprimir conta da Mesa ${table.number} antes de fechar`}
+                      className="mt-2.5 bg-white/20 hover:bg-white text-white hover:text-red-700 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-all shadow-sm border border-white/30 backdrop-blur-xs cursor-pointer active:scale-95"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Imprimir Conta</span>
+                    </button>
                   </div>
                 )}
-              </motion.button>
+              </motion.div>
 
               {/* Delete Table Button - only available if the table is closed */}
               {!isOpen && (
@@ -1045,12 +1255,26 @@ export default function Mesas() {
                   </button>
                 )}
               </div>
-              <button
-                onClick={closeTableModal}
-                className="text-gray-500 hover:text-gray-700 p-1"
-              >
-                <X className="w-6 h-6" />
-              </button>
+              <div className="flex items-center gap-2">
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => handlePrintTablePreBill()}
+                    className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold px-3 py-1.5 rounded-xl text-xs sm:text-sm border border-gray-300 transition-colors shadow-xs cursor-pointer"
+                    title="Imprimir pré-conta da mesa antes de fechar"
+                  >
+                    <Printer className="w-4 h-4 text-red-600" />
+                    <span className="hidden sm:inline">Imprimir Conta</span>
+                    <span className="sm:hidden">Conta</span>
+                  </button>
+                )}
+                <button
+                  onClick={closeTableModal}
+                  className="text-gray-500 hover:text-gray-700 p-1"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 flex flex-col overflow-hidden relative">
@@ -1257,23 +1481,36 @@ export default function Mesas() {
 
                   {/* Floating Next Step Button */}
                   <div className="absolute bottom-4 left-0 right-0 px-4 flex justify-center pointer-events-none">
-                    <div className="w-full max-w-md flex gap-2 pointer-events-auto">
+                    <div className="w-full max-w-lg flex items-center gap-2 pointer-events-auto">
                       <motion.button
                         whileTap={{ scale: 0.95 }}
                         onClick={() => handleSaveTable()}
-                        className="flex-1 bg-white text-red-600 border-2 border-red-600 py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-red-50 transition-all"
+                        className="flex-1 bg-white text-red-600 border-2 border-red-600 py-3 rounded-xl font-bold text-base shadow-lg hover:bg-red-50 transition-all text-center"
                       >
                         Salvar Mesa
                       </motion.button>
                       {cart.length > 0 && (
-                        <motion.button
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => setStep(2)}
-                          className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold text-lg shadow-lg hover:bg-red-700 transition-all flex items-center justify-center"
-                        >
-                          <ShoppingCart className="w-5 h-5 mr-2" />
-                          Ver Carrinho
-                        </motion.button>
+                        <>
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            type="button"
+                            onClick={() => handlePrintTablePreBill()}
+                            className="bg-slate-900 hover:bg-black text-white px-3.5 py-3 rounded-xl font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                            title="Imprimir conta da mesa para levar ao cliente antes de fechar"
+                          >
+                            <Printer className="w-4 h-4 text-amber-400" />
+                            <span className="hidden sm:inline">Imprimir Conta</span>
+                            <span className="sm:hidden">Conta</span>
+                          </motion.button>
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setStep(2)}
+                            className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold text-base shadow-lg hover:bg-red-700 transition-all flex items-center justify-center"
+                          >
+                            <ShoppingCart className="w-5 h-5 mr-1.5" />
+                            Ver Carrinho
+                          </motion.button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -1691,16 +1928,31 @@ export default function Mesas() {
 
                   {/* Step 2 Bottom Sticky Action Bar */}
                   <div className="p-4 bg-white border-t border-gray-200 shrink-0 shadow-lg space-y-3">
-                    <button
-                      onClick={handleSendWhatsApp}
-                      disabled={cart.length === 0}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black py-3 rounded-xl transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2 cursor-pointer text-sm"
-                    >
-                      <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                        <path d="M12.004 2c-5.51 0-9.993 4.483-9.993 9.993 0 1.763.457 3.49 1.332 5.013l-1.343 4.905 5.022-1.317c1.464.798 3.107 1.219 4.815 1.22 5.51 0 9.993-4.483 9.993-9.993C21.99 6.483 17.514 2 12.004 2zm6.182 14.126c-.255.725-1.025.1-1.3.1-2.31-1.764-2.22-.387-2.67-1.127.1-.258.261-.518.57-.86.919-.341.353-.618.396-1.127.143-.51-.254-2.148-.792-4.094-2.528-1.513-1.35-2.536-3.017-2.833-3.526-.297-.51-.031-.785.224-1.039.231-.228.51-.594.765-.89h.1c.17 0 .255.085.34.254.17.34.595 1.442.637 1.528.043.085.085.17.022.296-.064.128-.106.213-.213.34-.106.127-.223.212-.318.339-.096.126-.181.254-.085.424.096.17.425.702.914 1.139.63.565 1.162.934 1.714 1.189.51.254.786.19 1.062-.085.277-.275 1.211-1.4 1.53-1.887.085-.127.213-.17.34-.127.128.042.829.39 1.573.763.51.254.851.382.957.551.106.17.106.977-.149 1.702z" />
-                      </svg>
-                      Enviar Conferência da Mesa por WhatsApp
-                    </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => handlePrintTablePreBill()}
+                        disabled={cart.length === 0}
+                        className="w-full bg-slate-900 hover:bg-black disabled:opacity-50 text-white font-black py-3 px-4 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer text-sm"
+                        title="Imprimir a conta da mesa para levar ao cliente antes de fechar"
+                      >
+                        <Printer className="w-5 h-5 text-amber-400" />
+                        <span>Imprimir Conta (Pré-Conta)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSendWhatsApp}
+                        disabled={cart.length === 0}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black py-3 px-4 rounded-xl transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2 cursor-pointer text-sm"
+                        title="Enviar conferência da conta diretamente no WhatsApp do cliente"
+                      >
+                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                          <path d="M12.004 2c-5.51 0-9.993 4.483-9.993 9.993 0 1.763.457 3.49 1.332 5.013l-1.343 4.905 5.022-1.317c1.464.798 3.107 1.219 4.815 1.22 5.51 0 9.993-4.483 9.993-9.993C21.99 6.483 17.514 2 12.004 2zm6.182 14.126c-.255.725-1.025.1-1.3.1-2.31-1.764-2.22-.387-2.67-1.127.1-.258.261-.518.57-.86.919-.341.353-.618.396-1.127.143-.51-.254-2.148-.792-4.094-2.528-1.513-1.35-2.536-3.017-2.833-3.526-.297-.51-.031-.785.224-1.039.231-.228.51-.594.765-.89h.1c.17 0 .255.085.34.254.17.34.595 1.442.637 1.528.043.085.085.17.022.296-.064.128-.106.213-.213.34-.106.127-.223.212-.318.339-.096.126-.181.254-.085.424.096.17.425.702.914 1.139.63.565 1.162.934 1.714 1.189.51.254.786.19 1.062-.085.277-.275 1.211-1.4 1.53-1.887.085-.127.213-.17.34-.127.128.042.829.39 1.573.763.51.254.851.382.957.551.106.17.106.977-.149 1.702z" />
+                        </svg>
+                        <span>WhatsApp (Conferência)</span>
+                      </button>
+                    </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <button

@@ -19,9 +19,15 @@ import {
   AlertTriangle,
   Receipt,
   Clock,
-  FileText
+  FileText,
+  Layers,
+  CreditCard,
+  Split,
+  ChevronDown,
+  ChevronUp,
+  ShoppingBag
 } from 'lucide-react';
-import { format, isBefore, startOfDay, parseISO } from 'date-fns';
+import { format, isBefore, startOfDay, parseISO, addMonths, addDays } from 'date-fns';
 
 interface Bill {
   id: string;
@@ -33,6 +39,12 @@ interface Bill {
   paymentDate?: string;
   category?: string;
   notes?: string;
+  // Installment (compra/conta parcelada)
+  isInstallment?: boolean;
+  installmentNumber?: number;
+  totalInstallments?: number;
+  installmentGroupId?: string;
+  totalPurchaseAmount?: number;
 }
 
 const DEFAULT_CATEGORIES = [
@@ -52,7 +64,7 @@ export default function ContasPagar() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid' | 'overdue'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'installment'>('all');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   
@@ -69,7 +81,13 @@ export default function ContasPagar() {
     category: 'Matéria-prima',
     notes: '',
     customCategory: '',
-    isCustomCategory: false
+    isCustomCategory: false,
+    // Installment fields
+    isInstallment: false,
+    totalInstallments: 3,
+    installmentInterval: 'mensal' as 'mensal' | 'quinzenal' | 'semanal' | 'dias',
+    customIntervalDays: 30,
+    valueCalculationMode: 'total' as 'total' | 'parcela',
   });
 
   // Fetch bills from Firestore
@@ -94,7 +112,12 @@ export default function ContasPagar() {
             createdAt: data.createdAt || new Date().toISOString(),
             category: data.category || 'Outros',
             notes: data.notes || '',
-            paymentDate: data.paymentDate || undefined
+            paymentDate: data.paymentDate || undefined,
+            isInstallment: Boolean(data.isInstallment),
+            installmentNumber: data.installmentNumber ? Number(data.installmentNumber) : undefined,
+            totalInstallments: data.totalInstallments ? Number(data.totalInstallments) : undefined,
+            installmentGroupId: data.installmentGroupId || undefined,
+            totalPurchaseAmount: data.totalPurchaseAmount ? Number(data.totalPurchaseAmount) : undefined
           });
         });
         
@@ -125,6 +148,75 @@ export default function ContasPagar() {
     return [...DEFAULT_CATEGORIES, ...Array.from(new Set(dynamicCats))];
   }, [bills]);
 
+  // Dynamic calculations for installment schedule
+  const computedInstallments = useMemo(() => {
+    if (!formData.isInstallment) return [];
+    const count = Math.max(2, Math.min(48, Number(formData.totalInstallments) || 2));
+    const rawVal = parseFloat(formData.amount.replace(',', '.'));
+    const amountVal = isNaN(rawVal) || rawVal < 0 ? 0 : rawVal;
+
+    let baseDate: Date;
+    try {
+      baseDate = formData.dueDate ? new Date(formData.dueDate + 'T12:00:00') : new Date();
+      if (isNaN(baseDate.getTime())) baseDate = new Date();
+    } catch {
+      baseDate = new Date();
+    }
+
+    let eachAmount = 0;
+    let totalSum = 0;
+    if (formData.valueCalculationMode === 'total') {
+      totalSum = amountVal;
+      eachAmount = Math.floor((totalSum / count) * 100) / 100;
+    } else {
+      eachAmount = amountVal;
+      totalSum = Math.round(eachAmount * count * 100) / 100;
+    }
+
+    const items: { number: number; dueDate: string; amount: number }[] = [];
+    let accumulated = 0;
+
+    for (let i = 1; i <= count; i++) {
+      let instDate: Date;
+      if (formData.installmentInterval === 'mensal') {
+        instDate = addMonths(baseDate, i - 1);
+      } else if (formData.installmentInterval === 'quinzenal') {
+        instDate = addDays(baseDate, (i - 1) * 15);
+      } else if (formData.installmentInterval === 'semanal') {
+        instDate = addDays(baseDate, (i - 1) * 7);
+      } else {
+        const step = Math.max(1, Number(formData.customIntervalDays) || 30);
+        instDate = addDays(baseDate, (i - 1) * step);
+      }
+
+      let itemAmt = eachAmount;
+      if (formData.valueCalculationMode === 'total') {
+        if (i === count) {
+          // Adjust cents difference on last installment
+          itemAmt = Math.round((totalSum - accumulated) * 100) / 100;
+        } else {
+          accumulated += itemAmt;
+        }
+      }
+
+      items.push({
+        number: i,
+        dueDate: format(instDate, 'yyyy-MM-dd'),
+        amount: Math.max(0, itemAmt)
+      });
+    }
+
+    return items;
+  }, [
+    formData.isInstallment,
+    formData.totalInstallments,
+    formData.amount,
+    formData.dueDate,
+    formData.installmentInterval,
+    formData.customIntervalDays,
+    formData.valueCalculationMode
+  ]);
+
   // Open modal for editing
   const handleEditClick = (bill: Bill) => {
     setEditingBill(bill);
@@ -137,7 +229,12 @@ export default function ContasPagar() {
       category: isCustom ? 'custom' : (bill.category || 'Matéria-prima'),
       notes: bill.notes || '',
       customCategory: isCustom ? (bill.category || '') : '',
-      isCustomCategory: isCustom
+      isCustomCategory: isCustom,
+      isInstallment: Boolean(bill.isInstallment),
+      totalInstallments: bill.totalInstallments || 3,
+      installmentInterval: 'mensal',
+      customIntervalDays: 30,
+      valueCalculationMode: 'total',
     });
     setIsModalOpen(true);
   };
@@ -152,7 +249,12 @@ export default function ContasPagar() {
       category: 'Matéria-prima',
       notes: '',
       customCategory: '',
-      isCustomCategory: false
+      isCustomCategory: false,
+      isInstallment: false,
+      totalInstallments: 3,
+      installmentInterval: 'mensal',
+      customIntervalDays: 30,
+      valueCalculationMode: 'total',
     });
     setIsModalOpen(true);
   };
@@ -168,8 +270,14 @@ export default function ContasPagar() {
         amount: typeof bill.amount === 'number' ? bill.amount : parseFloat(String(bill.amount || '0')) || 0,
         createdAt: bill.createdAt ? bill.createdAt : new Date().toISOString(),
         category: bill.category || 'Outros',
-        notes: bill.notes || ''
+        notes: bill.notes || '',
+        isInstallment: Boolean(bill.isInstallment)
       };
+
+      if (bill.installmentNumber) updatedData.installmentNumber = bill.installmentNumber;
+      if (bill.totalInstallments) updatedData.totalInstallments = bill.totalInstallments;
+      if (bill.installmentGroupId) updatedData.installmentGroupId = bill.installmentGroupId;
+      if (bill.totalPurchaseAmount) updatedData.totalPurchaseAmount = bill.totalPurchaseAmount;
       
       const dStr = bill.dueDate || new Date().toISOString();
       updatedData.dueDate = dStr.includes('T') ? dStr : new Date(dStr + 'T12:00:00').toISOString();
@@ -180,7 +288,7 @@ export default function ContasPagar() {
     }
   };
 
-  // Delete bill
+  // Delete single bill
   const handleDeleteBill = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'bills', id));
@@ -190,7 +298,18 @@ export default function ContasPagar() {
     }
   };
 
-  // Submit form (create/update)
+  // Delete all installments from a group
+  const handleDeleteAllInstallments = async (groupId: string) => {
+    try {
+      const toDelete = bills.filter(b => b.installmentGroupId === groupId);
+      await Promise.all(toDelete.map(b => deleteDoc(doc(db, 'bills', b.id))));
+      setBillToDelete(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `bills/group/${groupId}`);
+    }
+  };
+
+  // Submit form (create single bill OR generate installment schedule)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -214,8 +333,8 @@ export default function ContasPagar() {
         return;
       }
 
-      // Format Due Date to start of day in ISO or simple timestamp
-      const due = new Date(formData.dueDate + 'T12:00:00'); // prevents timezone shifts
+      // Format Due Date to start of day in ISO
+      const due = new Date(formData.dueDate + 'T12:00:00');
       const dueISO = due.toISOString();
 
       let finalCreatedAt = new Date().toISOString();
@@ -233,22 +352,71 @@ export default function ContasPagar() {
         }
       }
 
-      const payData: Omit<Bill, 'id'> = {
-        description: formData.description.trim(),
-        amount: amountParsed,
-        dueDate: dueISO,
-        category: finalCategory,
-        notes: formData.notes.trim(),
-        status: editingBill ? editingBill.status : 'pending',
-        createdAt: finalCreatedAt
-      };
-
       if (editingBill) {
+        // Editing an existing bill
+        const payData: any = {
+          description: formData.description.trim(),
+          amount: amountParsed,
+          dueDate: dueISO,
+          category: finalCategory,
+          notes: formData.notes.trim(),
+          status: editingBill.status || 'pending',
+          createdAt: finalCreatedAt
+        };
+
         if (editingBill.paymentDate) {
           payData.paymentDate = editingBill.paymentDate;
         }
-        await updateDoc(doc(db, 'bills', editingBill.id), payData as any);
+        if (editingBill.isInstallment) {
+          payData.isInstallment = true;
+          if (editingBill.installmentNumber) payData.installmentNumber = editingBill.installmentNumber;
+          if (editingBill.totalInstallments) payData.totalInstallments = editingBill.totalInstallments;
+          if (editingBill.installmentGroupId) payData.installmentGroupId = editingBill.installmentGroupId;
+          if (editingBill.totalPurchaseAmount) payData.totalPurchaseAmount = editingBill.totalPurchaseAmount;
+        }
+
+        await updateDoc(doc(db, 'bills', editingBill.id), payData);
+      } else if (formData.isInstallment) {
+        // Creating a new installment purchase with N installments
+        const count = Math.max(2, Math.min(48, Number(formData.totalInstallments) || 2));
+        const installmentGroupId = 'inst_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+        const totalPurchaseAmount = computedInstallments.reduce((sum, item) => sum + item.amount, 0);
+
+        for (const item of computedInstallments) {
+          const installmentDueISO = new Date(item.dueDate + 'T12:00:00').toISOString();
+          const cleanDesc = formData.description.trim();
+          const instNotes = `${formData.notes.trim() ? formData.notes.trim() + '\n' : ''}Compra Parcelada (${item.number}/${count}) • Total da compra: R$ ${totalPurchaseAmount.toFixed(2).replace('.', ',')}`;
+
+          const payData: any = {
+            description: `${cleanDesc} (${item.number}/${count})`,
+            amount: item.amount,
+            dueDate: installmentDueISO,
+            category: finalCategory,
+            notes: instNotes,
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+            isInstallment: true,
+            installmentNumber: item.number,
+            totalInstallments: count,
+            installmentGroupId,
+            totalPurchaseAmount
+          };
+
+          await addDoc(collection(db, 'bills'), payData);
+        }
       } else {
+        // Creating a single standard bill
+        const payData: Omit<Bill, 'id'> = {
+          description: formData.description.trim(),
+          amount: amountParsed,
+          dueDate: dueISO,
+          category: finalCategory,
+          notes: formData.notes.trim(),
+          status: 'pending',
+          createdAt: finalCreatedAt,
+          isInstallment: false
+        };
+
         await addDoc(collection(db, 'bills'), payData);
       }
 
@@ -293,6 +461,8 @@ export default function ContasPagar() {
         matchesStatus = b.status === 'paid';
       } else if (statusFilter === 'overdue') {
         matchesStatus = isOverdue(b);
+      } else if (statusFilter === 'installment') {
+        matchesStatus = !!b.isInstallment;
       }
 
       // 4. Period filter
@@ -319,8 +489,14 @@ export default function ContasPagar() {
     let overdueSum = 0;
     let paidSum = 0;
     let overdueCount = 0;
+    let installmentCount = 0;
+    let installmentSum = 0;
 
     bills.forEach((b) => {
+      if (b.isInstallment) {
+        installmentCount++;
+        installmentSum += b.amount;
+      }
       if (b.status === 'paid') {
         paidSum += b.amount;
       } else {
@@ -337,6 +513,8 @@ export default function ContasPagar() {
       overdueSum,
       paidSum,
       overdueCount,
+      installmentCount,
+      installmentSum,
       totalCount: bills.length
     };
   }, [bills]);
@@ -683,6 +861,17 @@ export default function ContasPagar() {
           >
             Pagas ({bills.filter(b => b.status === 'paid').length})
           </button>
+          <button
+            onClick={() => setStatusFilter('installment')}
+            className={`px-4 py-1.5 rounded-md font-bold text-xs transition-all flex items-center gap-1.5 ${
+              statusFilter === 'installment' 
+                ? 'bg-purple-600 text-white shadow-sm' 
+                : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+            }`}
+          >
+            <Layers className="h-3.5 w-3.5" />
+            Parceladas ({kpis.installmentCount})
+          </button>
         </div>
 
         {/* Category & Search Filter */}
@@ -835,11 +1024,21 @@ export default function ContasPagar() {
                         {/* Descrição */}
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
-                            <span className={`text-sm font-bold truncate max-w-xs sm:max-w-md ${
-                              bill.status === 'paid' ? 'text-gray-400 line-through' : 'text-gray-900'
-                            }`}>
-                              {bill.description}
-                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-sm font-bold truncate max-w-xs sm:max-w-md ${
+                                bill.status === 'paid' ? 'text-gray-400 line-through' : 'text-gray-900'
+                              }`}>
+                                {bill.description}
+                              </span>
+                              {bill.isInstallment && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-200 shadow-xs">
+                                  <Layers className="h-3 w-3" />
+                                  {bill.installmentNumber && bill.totalInstallments
+                                    ? `Parcela ${bill.installmentNumber}/${bill.totalInstallments}`
+                                    : 'Parcelada'}
+                                </span>
+                              )}
+                            </div>
                             {bill.notes && (
                               <span className="text-xs text-gray-400 mt-0.5 truncate max-w-xs sm:max-w-md">
                                 {bill.notes}
@@ -946,9 +1145,9 @@ export default function ContasPagar() {
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="bg-white rounded-2xl max-w-md w-full overflow-hidden shadow-2xl border border-gray-150 flex flex-col"
+              className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden shadow-2xl border border-gray-150 flex flex-col"
             >
-              <div className="p-5 border-b flex items-center justify-between bg-gray-50/70">
+              <div className="p-5 border-b flex items-center justify-between bg-gray-50/70 shrink-0">
                 <h2 className="text-lg font-black text-gray-800 flex items-center gap-2">
                   <Receipt className="h-5 w-5 text-red-500" />
                   {editingBill ? 'Editar Conta a Pagar' : 'Nova Conta a Pagar'}
@@ -961,7 +1160,7 @@ export default function ContasPagar() {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="p-5 space-y-4 flex-1">
+              <form onSubmit={handleSubmit} className="p-5 space-y-4 flex-1 overflow-y-auto">
                 {/* Descrição */}
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Descrição / Favorecido *</label>
@@ -980,7 +1179,11 @@ export default function ContasPagar() {
                 <div className="grid grid-cols-2 gap-3">
                   {/* Valor */}
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Valor (R$) *</label>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      {formData.isInstallment 
+                        ? (formData.valueCalculationMode === 'total' ? 'Valor Total (R$) *' : 'Valor Parcela (R$) *') 
+                        : 'Valor (R$) *'}
+                    </label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-sm font-bold text-gray-400">R$</span>
                       <input
@@ -996,7 +1199,9 @@ export default function ContasPagar() {
 
                   {/* Vencimento */}
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Vencimento *</label>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      {formData.isInstallment ? '1º Vencimento *' : 'Vencimento *'}
+                    </label>
                     <input
                       type="date"
                       required
@@ -1006,6 +1211,180 @@ export default function ContasPagar() {
                     />
                   </div>
                 </div>
+
+                {/* Bloco de Compra / Conta Parcelada */}
+                {!editingBill && (
+                  <div className="bg-purple-50/70 border-2 border-purple-200 rounded-2xl p-4 transition-all space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2.5">
+                        <div className="p-2 bg-purple-100 rounded-xl text-purple-700">
+                          <Layers className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <label htmlFor="isInstallmentToggle" className="text-sm font-black text-gray-800 cursor-pointer block">
+                            Compra ou Conta Parcelada?
+                          </label>
+                          <span className="text-[11px] text-gray-500 block">
+                            Divide ou multiplica em parcelas automáticas
+                          </span>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          id="isInstallmentToggle"
+                          type="checkbox"
+                          checked={formData.isInstallment}
+                          onChange={(e) => setFormData({ ...formData, isInstallment: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                      </label>
+                    </div>
+
+                    {formData.isInstallment && (
+                      <div className="pt-2 border-t border-purple-200/80 space-y-3">
+                        {/* Modo de cálculo: Total da Compra vs Valor da Parcela */}
+                        <div>
+                          <label className="text-[10px] font-bold text-purple-900 uppercase tracking-wider block mb-1.5">
+                            O valor digitado acima corresponde a:
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, valueCalculationMode: 'total' })}
+                              className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-left flex flex-col justify-center ${
+                                formData.valueCalculationMode === 'total'
+                                  ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                                  : 'bg-white text-gray-700 border-purple-200 hover:bg-purple-100/50'
+                              }`}
+                            >
+                              <span>Valor Total da Compra</span>
+                              <span className={`text-[10px] font-normal ${formData.valueCalculationMode === 'total' ? 'text-purple-100' : 'text-gray-400'}`}>
+                                Dividir entre as parcelas
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, valueCalculationMode: 'parcela' })}
+                              className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-left flex flex-col justify-center ${
+                                formData.valueCalculationMode === 'parcela'
+                                  ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                                  : 'bg-white text-gray-700 border-purple-200 hover:bg-purple-100/50'
+                              }`}
+                            >
+                              <span>Valor de Cada Parcela</span>
+                              <span className={`text-[10px] font-normal ${formData.valueCalculationMode === 'parcela' ? 'text-purple-100' : 'text-gray-400'}`}>
+                                Multiplicar pelo número de parcelas
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Parcelas e Intervalo */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-bold text-purple-900 uppercase tracking-wider block mb-1">
+                              Número de Parcelas:
+                            </label>
+                            <select
+                              value={formData.totalInstallments}
+                              onChange={(e) => setFormData({ ...formData, totalInstallments: Math.max(2, parseInt(e.target.value) || 2) })}
+                              className="w-full border-2 border-purple-200 rounded-xl p-2.5 bg-white font-bold text-xs text-purple-950 outline-none focus:border-purple-500 cursor-pointer"
+                            >
+                              {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15, 18, 24, 36, 48].map((n) => (
+                                <option key={n} value={n}>
+                                  {n}x parcelas
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-purple-900 uppercase tracking-wider block mb-1">
+                              Intervalo:
+                            </label>
+                            <select
+                              value={formData.installmentInterval}
+                              onChange={(e) => setFormData({ ...formData, installmentInterval: e.target.value as any })}
+                              className="w-full border-2 border-purple-200 rounded-xl p-2.5 bg-white font-bold text-xs text-purple-950 outline-none focus:border-purple-500 cursor-pointer"
+                            >
+                              <option value="mensal">Mensal (a cada mês / 30 dias)</option>
+                              <option value="quinzenal">Quinzenal (a cada 15 dias)</option>
+                              <option value="semanal">Semanal (a cada 7 dias)</option>
+                              <option value="dias">Personalizado (em dias)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {formData.installmentInterval === 'dias' && (
+                          <div>
+                            <label className="text-[10px] font-bold text-purple-900 uppercase tracking-wider block mb-1">
+                              Dias entre cada parcela:
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              max={365}
+                              value={formData.customIntervalDays}
+                              onChange={(e) => setFormData({ ...formData, customIntervalDays: Math.max(1, parseInt(e.target.value) || 30) })}
+                              className="w-full border-2 border-purple-200 rounded-xl p-2.5 bg-white font-bold text-xs text-purple-950 outline-none focus:border-purple-500"
+                            />
+                          </div>
+                        )}
+
+                        {/* Pré-visualização das parcelas */}
+                        {computedInstallments.length > 0 && (
+                          <div className="bg-white rounded-xl p-3 border border-purple-200 space-y-2">
+                            <div className="flex items-center justify-between text-xs font-black text-purple-950 pb-1 border-b border-purple-100">
+                              <span className="flex items-center gap-1.5">
+                                <CreditCard className="h-3.5 w-3.5 text-purple-600" />
+                                Cronograma ({computedInstallments.length} parcelas)
+                              </span>
+                              <span>
+                                Total: R$ {computedInstallments
+                                  .reduce((acc, cur) => acc + cur.amount, 0)
+                                  .toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            <div className="max-h-36 overflow-y-auto space-y-1 pr-1 scrollbar-thin">
+                              {computedInstallments.map((inst) => (
+                                <div
+                                  key={inst.number}
+                                  className="flex items-center justify-between text-[11px] bg-purple-50/50 px-2.5 py-1.5 rounded-lg border border-purple-100"
+                                >
+                                  <span className="font-bold text-purple-900">
+                                    {inst.number}ª Parcela ({inst.number}/{formData.totalInstallments})
+                                  </span>
+                                  <span className="text-gray-500">
+                                    Vencimento: {inst.dueDate.split('-').reverse().join('/')}
+                                  </span>
+                                  <span className="font-black text-purple-950">
+                                    R$ {inst.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Banner de aviso ao editar parcela individual */}
+                {editingBill && editingBill.isInstallment && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 flex items-start gap-2.5 text-xs text-purple-800">
+                    <Layers className="h-4 w-4 text-purple-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-black">
+                        Esta conta faz parte de uma compra parcelada ({editingBill.installmentNumber}/{editingBill.totalInstallments})
+                      </p>
+                      <p className="text-[11px] text-purple-600 mt-0.5">
+                        A alteração deste registro atualizará apenas esta parcela específica, mantendo as demais salvas.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Categoria */}
                 <div className="space-y-2">
@@ -1061,7 +1440,7 @@ export default function ContasPagar() {
                 </div>
 
                 {/* Buttons controls */}
-                <div className="flex items-center space-x-3 pt-3">
+                <div className="flex items-center space-x-3 pt-3 shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
@@ -1073,7 +1452,7 @@ export default function ContasPagar() {
                     type="submit"
                     className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold transition-all text-sm shadow-md hover:shadow-lg"
                   >
-                    Salvar
+                    {editingBill ? 'Salvar Alterações' : (formData.isInstallment ? `Lançar ${formData.totalInstallments}x Parcelas` : 'Salvar Conta')}
                   </button>
                 </div>
               </form>
@@ -1095,35 +1474,72 @@ export default function ContasPagar() {
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 text-red-600 mb-4 animate-bounce">
                 <AlertTriangle className="h-6 w-6" />
               </div>
-              <h3 className="text-lg font-black text-gray-800">Excluir Conta a Pagar?</h3>
+              <h3 className="text-lg font-black text-gray-800">
+                {billToDelete.isInstallment ? 'Excluir Parcela / Compra?' : 'Excluir Conta a Pagar?'}
+              </h3>
               <p className="text-sm text-gray-500 mt-2">
                 Tem certeza de que deseja excluir a conta <span className="font-extrabold text-gray-800">"{billToDelete.description}"</span>?
               </p>
               {billToDelete.amount && (
                 <p className="text-sm font-black text-red-600 mt-1">
-                  Valor: R$ {billToDelete.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  Valor desta parcela: R$ {billToDelete.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
               )}
-              <p className="text-xs text-rose-500 mt-3 bg-rose-50 py-1.5 px-3 rounded-lg border border-rose-100 font-bold">
-                Esta ação é irreversível e excluirá o registro permanentemente.
-              </p>
 
-              <div className="flex items-center space-x-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => setBillToDelete(null)}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-bold transition-all text-xs"
-                >
-                  Voltar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteBill(billToDelete.id)}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-xl font-bold transition-all text-xs shadow-md hover:shadow-lg"
-                >
-                  Confirmar Exclusão
-                </button>
-              </div>
+              {billToDelete.isInstallment && billToDelete.installmentGroupId ? (
+                <div className="mt-4 space-y-2.5">
+                  <p className="text-xs text-purple-800 bg-purple-50 py-2 px-3 rounded-lg border border-purple-200 font-bold">
+                    Esta conta faz parte de um parcelamento ({billToDelete.installmentNumber}/{billToDelete.totalInstallments}). O que deseja fazer?
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteBill(billToDelete.id)}
+                    className="w-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 py-2.5 px-3 rounded-xl font-bold transition-all text-xs"
+                  >
+                    Excluir apenas esta parcela ({billToDelete.installmentNumber}/{billToDelete.totalInstallments})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteAllInstallments(billToDelete.installmentGroupId!)}
+                    className="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 px-3 rounded-xl font-bold transition-all text-xs shadow-md"
+                  >
+                    Excluir TODAS as parcelas desta compra
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setBillToDelete(null)}
+                    className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 rounded-xl font-bold transition-all text-xs mt-1"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-rose-500 mt-3 bg-rose-50 py-1.5 px-3 rounded-lg border border-rose-100 font-bold">
+                    Esta ação é irreversível e excluirá o registro permanentemente.
+                  </p>
+
+                  <div className="flex items-center space-x-3 mt-6">
+                    <button
+                      type="button"
+                      onClick={() => setBillToDelete(null)}
+                      className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-xl font-bold transition-all text-xs"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteBill(billToDelete.id)}
+                      className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-xl font-bold transition-all text-xs shadow-md hover:shadow-lg"
+                    >
+                      Confirmar Exclusão
+                    </button>
+                  </div>
+                </>
+              )}
             </motion.div>
           </div>
         )}

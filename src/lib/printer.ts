@@ -128,6 +128,12 @@ export class BluetoothPrinter {
       return;
     }
 
+    if (order.isPreBill || order.isPreConta) {
+      const text = formatTablePreBillText(order);
+      await this.printTicket(text, { cut: true, feedLines: 5 });
+      return;
+    }
+
     const shouldPrintCustomer = options?.customerOnly
       ? true
       : options?.productionOnly
@@ -475,12 +481,101 @@ export function formatProductionReceiptText(order: any): string {
 }
 
 /**
+ * Formata a CONFERÊNCIA DE CONTA (PRÉ-CONTA) DA MESA para conferência do cliente antes do fechamento
+ */
+export function formatTablePreBillText(order: any): string {
+  let text = `================================\n`;
+  text += `      CONFERENCIA DE CONTA      \n`;
+  text += `          (PRE-CONTA)           \n`;
+  text += `     PDV ALAMBARI DEFUMADOS     \n`;
+  text += `================================\n`;
+  text += `NAO E DOCUMENTO FISCAL\n`;
+
+  const date = order.createdAt || new Date().toISOString();
+  const dateStr = new Date(date).toLocaleString('pt-BR');
+  text += `Data/Hora: ${dateStr}\n`;
+
+  // DESTAQUE DA MESA
+  text += `${ESC_POS.ALIGN_CENTER}`;
+  text += `--------------------------------\n`;
+  text += `${ESC_POS.DOUBLE_SIZE_BOLD}MESA ${order.tableNumber}${ESC_POS.NORMAL}\n`;
+  text += `--------------------------------\n`;
+  text += `${ESC_POS.ALIGN_LEFT}`;
+
+  if (order.customerName) {
+    text += `CLIENTE: ${order.customerName}\n`;
+  }
+  if (order.customerPhone) {
+    text += `FONE: ${order.customerPhone}\n`;
+  }
+
+  text += `--------------------------------\n`;
+  text += `QTD ITEM                  VALOR \n`;
+  text += `--------------------------------\n`;
+
+  for (const item of (order.items || [])) {
+    const isKg = item.unit === 'kg' || (item.name && item.name.toLowerCase().includes('/kg'));
+    const qtyNum = Number(item.quantity) || 1;
+    const priceNum = Number(item.price) || 0;
+    const itemTotal = priceNum * qtyNum;
+
+    const qtyStr = isKg ? `${qtyNum.toFixed(3).replace('.', ',')}kg` : `${qtyNum}x`;
+    const qtdFormatted = qtyStr.padEnd(7);
+    const nameStr = (item.name || '').substring(0, 15).padEnd(15);
+    const priceStr = `R$ ${itemTotal.toFixed(2).replace('.', ',')}`.padStart(10);
+    text += `${qtdFormatted}${nameStr}${priceStr}\n`;
+    if (isKg) {
+      text += `  * R$ ${priceNum.toFixed(2).replace('.', ',')}/kg\n`;
+    }
+    if (item.observation) {
+      text += `  * Obs: ${item.observation}\n`;
+    }
+  }
+
+  text += `--------------------------------\n`;
+
+  let subtotal = Number(order.total || 0);
+  if (order.discount && Number(order.discount) > 0) {
+    subtotal += Number(order.discount);
+    text += `SUBTOTAL:            R$ ${subtotal.toFixed(2).replace('.', ',')}\n`;
+    text += `DESCONTO:           -R$ ${Number(order.discount).toFixed(2).replace('.', ',')}\n`;
+  }
+
+  text += `${ESC_POS.BOLD_ON}`;
+  text += `TOTAL A PAGAR:       R$ ${Number(order.total || 0).toFixed(2).replace('.', ',')}\n`;
+  text += `${ESC_POS.BOLD_OFF}`;
+  text += `--------------------------------\n`;
+
+  text += `STATUS: CONTA ABERTA (CONFERIR)\n`;
+  text += `Aguardando pagamento no caixa\n`;
+  text += `--------------------------------\n`;
+  text += `   Formas de pagamento aceitas: \n`;
+  text += `     Dinheiro, Cartao e PIX     \n`;
+  text += `--------------------------------\n`;
+  if (order.observations) {
+    text += `OBS: ${order.observations}\n`;
+    text += `--------------------------------\n`;
+  }
+  text += `   Favor conferir seu consumo!  \n`;
+  text += `    Obrigado pela preferencia!  \n`;
+  text += `================================\n`;
+  text += `  --- DESTAQUE AQUI (CORTE) --- \n`;
+  text += `================================\n`;
+
+  return text;
+}
+
+/**
  * Função mantida para retrocompatibilidade geral.
  * Se nenhuma opção for passada, gera ambas as vias com indicação clara.
  */
 export function formatOrderToText(order: any, options?: { customerOnly?: boolean; productionOnly?: boolean }): string {
   if (order.isCashierReport) {
     return formatCashierReportText(order);
+  }
+
+  if (order.isPreBill || order.isPreConta) {
+    return formatTablePreBillText(order);
   }
 
   if (options?.customerOnly) {

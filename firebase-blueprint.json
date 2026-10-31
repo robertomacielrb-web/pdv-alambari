@@ -80,7 +80,12 @@
         "paymentDate": { "type": "string", "format": "date-time", "description": "Payment date" },
         "category": { "type": "string", "description": "Bill category" },
         "notes": { "type": "string", "description": "Additional notes" },
-        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "isInstallment": { "type": "boolean", "description": "Whether this bill is part of an installment purchase" },
+        "installmentNumber": { "type": "number", "description": "Current installment number" },
+        "totalInstallments": { "type": "number", "description": "Total number of installments in the purchase" },
+        "installmentGroupId": { "type": "string", "description": "Unique identifier connecting all installments of the same purchase" },
+        "totalPurchaseAmount": { "type": "number", "description": "Original total purchase amount before splitting into installments" }
       },
       "required": ["description", "amount", "dueDate", "status", "createdAt"]
     },

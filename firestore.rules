@@ -126,7 +126,12 @@ service cloud.firestore {
              isValidDateString(data.createdAt) &&
              (!('paymentDate' in data) || isValidDateString(data.paymentDate)) &&
              (!('category' in data) || isValidString(data.category, 1, 100)) &&
-             (!('notes' in data) || data.notes == '' || isValidString(data.notes, 1, 500));
+             (!('notes' in data) || data.notes == '' || isValidString(data.notes, 1, 500)) &&
+             (!('isInstallment' in data) || data.isInstallment is bool) &&
+             (!('installmentNumber' in data) || (data.installmentNumber is number && data.installmentNumber > 0)) &&
+             (!('totalInstallments' in data) || (data.totalInstallments is number && data.totalInstallments > 0)) &&
+             (!('installmentGroupId' in data) || isValidString(data.installmentGroupId, 1, 128)) &&
+             (!('totalPurchaseAmount' in data) || isValidNumber(data.totalPurchaseAmount, 0));
     }
 
     function isValidTable(data) {

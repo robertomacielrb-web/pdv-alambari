@@ -485,23 +485,26 @@ export function formatProductionReceiptText(order: any): string {
  */
 export function formatTablePreBillText(order: any): string {
   let text = `================================\n`;
+  text += `${ESC_POS.BOLD_ON}`;
   text += `      CONFERENCIA DE CONTA      \n`;
   text += `          (PRE-CONTA)           \n`;
   text += `     PDV ALAMBARI DEFUMADOS     \n`;
   text += `================================\n`;
-  text += `NAO E DOCUMENTO FISCAL\n`;
+  text += `* NAO E DOCUMENTO FISCAL *\n`;
 
   const date = order.createdAt || new Date().toISOString();
   const dateStr = new Date(date).toLocaleString('pt-BR');
   text += `Data/Hora: ${dateStr}\n`;
+  text += `${ESC_POS.BOLD_OFF}`;
 
-  // DESTAQUE DA MESA
+  // DESTAQUE DA MESA EM TAMANHO GRANDE
   text += `${ESC_POS.ALIGN_CENTER}`;
-  text += `--------------------------------\n`;
+  text += `================================\n`;
   text += `${ESC_POS.DOUBLE_SIZE_BOLD}MESA ${order.tableNumber}${ESC_POS.NORMAL}\n`;
-  text += `--------------------------------\n`;
+  text += `================================\n`;
   text += `${ESC_POS.ALIGN_LEFT}`;
 
+  text += `${ESC_POS.BOLD_ON}`;
   if (order.customerName) {
     text += `CLIENTE: ${order.customerName}\n`;
   }
@@ -525,10 +528,10 @@ export function formatTablePreBillText(order: any): string {
     const priceStr = `R$ ${itemTotal.toFixed(2).replace('.', ',')}`.padStart(10);
     text += `${qtdFormatted}${nameStr}${priceStr}\n`;
     if (isKg) {
-      text += `  * R$ ${priceNum.toFixed(2).replace('.', ',')}/kg\n`;
+      text += `  (R$ ${priceNum.toFixed(2).replace('.', ',')}/kg)\n`;
     }
     if (item.observation) {
-      text += `  * Obs: ${item.observation}\n`;
+      text += `  ** Obs: ${item.observation}\n`;
     }
   }
 
@@ -540,12 +543,16 @@ export function formatTablePreBillText(order: any): string {
     text += `SUBTOTAL:            R$ ${subtotal.toFixed(2).replace('.', ',')}\n`;
     text += `DESCONTO:           -R$ ${Number(order.discount).toFixed(2).replace('.', ',')}\n`;
   }
+  text += `${ESC_POS.BOLD_OFF}`;
+
+  // TOTAL EM DESTAQUE MÁXIMO (TAMANHO DUPLO E NEGRITO)
+  text += `================================\n`;
+  text += `${ESC_POS.ALIGN_CENTER}`;
+  text += `${ESC_POS.DOUBLE_SIZE_BOLD}TOTAL: R$ ${Number(order.total || 0).toFixed(2).replace('.', ',')}${ESC_POS.NORMAL}\n`;
+  text += `${ESC_POS.ALIGN_LEFT}`;
+  text += `================================\n`;
 
   text += `${ESC_POS.BOLD_ON}`;
-  text += `TOTAL A PAGAR:       R$ ${Number(order.total || 0).toFixed(2).replace('.', ',')}\n`;
-  text += `${ESC_POS.BOLD_OFF}`;
-  text += `--------------------------------\n`;
-
   text += `STATUS: CONTA ABERTA (CONFERIR)\n`;
   text += `Aguardando pagamento no caixa\n`;
   text += `--------------------------------\n`;
@@ -558,6 +565,7 @@ export function formatTablePreBillText(order: any): string {
   }
   text += `   Favor conferir seu consumo!  \n`;
   text += `    Obrigado pela preferencia!  \n`;
+  text += `${ESC_POS.BOLD_OFF}`;
   text += `================================\n`;
   text += `  --- DESTAQUE AQUI (CORTE) --- \n`;
   text += `================================\n`;

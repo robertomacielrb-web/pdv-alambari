@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   collection,
   query,
@@ -60,6 +61,7 @@ interface CashierSession {
 }
 
 export default function Fiados() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -501,6 +503,7 @@ export default function Fiados() {
 
       handlePrint({ ...selectedFiado, ...orderData });
       closeFiadoModal();
+      navigate("/balcao");
     } catch (error: any) {
       alert(
         "Erro ao finalizar pagamento: " +

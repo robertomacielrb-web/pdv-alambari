@@ -744,14 +744,14 @@ export default function Mesas() {
         const subTotalText = (itemPrice * Number(item.quantity)).toFixed(2).replace(".", ",");
         return `
           <tr>
-            <td style="padding: 6px 0; border-bottom: 1px dotted #e5e7eb;">
-              <span style="font-weight: bold; font-size: 14px;">${item.name}</span>
-              <div style="font-size: 12px; color: #4b5563; margin-top: 2px;">
-                ${qtyText} ${isKg ? `(a R$ ${itemPrice.toFixed(2).replace(".", ",")}/kg)` : `x R$ ${itemPrice.toFixed(2).replace(".", ",")}`}
+            <td style="padding: 7px 0; border-bottom: 2px dashed #000;">
+              <span style="font-weight: 900; font-size: 15px; color: #000; display: block; text-transform: uppercase;">${item.name}</span>
+              <div style="font-size: 13px; font-weight: 800; color: #000; margin-top: 2px;">
+                <strong>${qtyText}</strong> ${isKg ? `(R$ ${itemPrice.toFixed(2).replace(".", ",")}/kg)` : `x R$ ${itemPrice.toFixed(2).replace(".", ",")}`}
               </div>
-              ${item.observation ? `<div style="font-size: 11px; font-style: italic; color: #6b7280; margin-top: 2px;">Obs: ${item.observation}</div>` : ""}
+              ${item.observation ? `<div style="font-size: 12px; font-weight: 800; color: #000; margin-top: 3px; padding: 2px 4px; border: 1px dashed #000; display: inline-block;">Obs: ${item.observation}</div>` : ""}
             </td>
-            <td style="text-align: right; padding: 6px 0; font-weight: bold; font-size: 14px; border-bottom: 1px dotted #e5e7eb; vertical-align: top;">
+            <td style="text-align: right; padding: 7px 0; font-weight: 900; font-size: 16px; color: #000; border-bottom: 2px dashed #000; vertical-align: top; white-space: nowrap;">
               R$ ${subTotalText}
             </td>
           </tr>
@@ -772,19 +772,31 @@ export default function Mesas() {
           <title>Pré-Conta - Mesa ${orderToPrint.tableNumber}</title>
           <style>
             html, body { margin: 0; padding: 0; box-sizing: border-box; background: #fff; }
-            body { font-family: 'Courier New', Courier, monospace; width: 100%; max-width: 80mm; margin: 0 auto; padding: 12px; font-size: 13px; color: #000; }
-            .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
-            .badge { display: inline-block; font-size: 12px; font-weight: bold; border: 1px solid #000; padding: 3px 8px; border-radius: 4px; margin-top: 4px; text-transform: uppercase; }
-            .table-title { font-size: 26px; font-weight: 900; margin: 8px 0; }
+            body { 
+              font-family: Arial, "Helvetica Neue", Helvetica, -apple-system, BlinkMacSystemFont, sans-serif; 
+              width: 100%; 
+              max-width: 80mm; 
+              margin: 0 auto; 
+              padding: 10px; 
+              font-size: 14px; 
+              font-weight: 700; 
+              color: #000; 
+              -webkit-print-color-adjust: exact; 
+              print-color-adjust: exact; 
+            }
+            .header { text-align: center; padding-bottom: 8px; margin-bottom: 8px; }
+            .header-banner { border: 2px solid #000; padding: 6px; margin-bottom: 6px; }
+            .badge { display: block; font-size: 13px; font-weight: 900; background: #000; color: #fff; padding: 4px 6px; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+            .table-title { font-size: 32px; font-weight: 900; margin: 8px 0; border-top: 3px solid #000; border-bottom: 3px solid #000; padding: 6px 0; letter-spacing: 1px; }
             table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-            .totals-box { border-top: 2px dashed #000; margin-top: 10px; padding-top: 8px; }
-            .total-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
-            .grand-total { display: flex; justify-content: space-between; font-size: 18px; font-weight: 900; margin-top: 8px; padding-top: 6px; border-top: 1px solid #000; }
-            .info-box { border: 1px dashed #000; padding: 8px; margin-top: 12px; text-align: center; font-size: 11px; }
-            .footer { text-align: center; border-top: 1px dashed #000; padding-top: 10px; margin-top: 12px; font-size: 11px; }
+            .totals-box { border-top: 3px solid #000; margin-top: 8px; padding-top: 8px; }
+            .total-row { display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; margin-bottom: 4px; color: #000; }
+            .grand-total { display: flex; justify-content: space-between; font-size: 26px; font-weight: 900; margin-top: 6px; padding: 6px 0; border-top: 3px solid #000; border-bottom: 3px solid #000; color: #000; letter-spacing: 0.5px; }
+            .info-box { border: 2px dashed #000; padding: 8px; margin-top: 12px; text-align: center; font-size: 13px; font-weight: 800; color: #000; }
+            .footer { text-align: center; border-top: 2px dashed #000; padding-top: 10px; margin-top: 12px; font-size: 12px; font-weight: 800; color: #000; }
             
             .no-print { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 15px; padding: 10px; background: #f3f4f6; border-radius: 8px; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-            .btn { flex: 1; padding: 12px 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-align: center; font-size: 14px; font-family: sans-serif; }
+            .btn { flex: 1; padding: 12px 10px; border: none; border-radius: 6px; font-weight: 900; cursor: pointer; text-align: center; font-size: 14px; font-family: sans-serif; }
             .btn-print { background: #16a34a; color: white; }
             .btn-close { background: #dc2626; color: white; }
             
@@ -802,21 +814,25 @@ export default function Mesas() {
           </div>
 
           <div class="header">
-            <h2 style="margin: 0; font-size: 18px;">PDV ALAMBARI DEFUMADOS</h2>
-            <div class="badge">Conferência de Conta (Pré-Conta)</div>
-            <p style="margin: 4px 0 0 0; font-size: 10px; font-style: italic;">* NÃO É DOCUMENTO FISCAL *</p>
+            <div class="header-banner">
+              <h2 style="margin: 0; font-size: 20px; font-weight: 900; letter-spacing: 0.5px;">PDV ALAMBARI DEFUMADOS</h2>
+              <div class="badge">CONFERÊNCIA DE CONTA (PRÉ-CONTA)</div>
+              <p style="margin: 4px 0 0 0; font-size: 11px; font-weight: 800; color: #000;">* NÃO É DOCUMENTO FISCAL *</p>
+            </div>
+
             <div class="table-title">MESA ${orderToPrint.tableNumber}</div>
-            <p style="margin: 3px 0; font-size: 11px;">Data/Hora: ${format(new Date(), "dd/MM/yyyy HH:mm")}</p>
-            ${orderToPrint.customerName ? `<p style="margin: 3px 0; font-size: 13px; font-weight: bold;">Cliente: ${orderToPrint.customerName}</p>` : ""}
-            ${orderToPrint.customerPhone ? `<p style="margin: 2px 0; font-size: 11px;">Fone: ${orderToPrint.customerPhone}</p>` : ""}
-            ${orderToPrint.observations ? `<p style="margin: 4px 0; font-size: 11px; font-weight: bold;">Obs: ${orderToPrint.observations}</p>` : ""}
+            
+            <p style="margin: 3px 0; font-size: 13px; font-weight: 800;">DATA/HORA: ${format(new Date(), "dd/MM/yyyy HH:mm")}</p>
+            ${orderToPrint.customerName ? `<p style="margin: 4px 0; font-size: 16px; font-weight: 900; text-transform: uppercase;">CLIENTE: ${orderToPrint.customerName}</p>` : ""}
+            ${orderToPrint.customerPhone ? `<p style="margin: 3px 0; font-size: 13px; font-weight: 800;">FONE: ${orderToPrint.customerPhone}</p>` : ""}
+            ${orderToPrint.observations ? `<p style="margin: 5px 0; font-size: 13px; font-weight: 900; border: 1px solid #000; padding: 4px;">OBS: ${orderToPrint.observations}</p>` : ""}
           </div>
 
           <table>
             <thead>
-              <tr style="border-bottom: 1px solid #000;">
-                <th style="text-align: left; padding-bottom: 4px; font-size: 12px;">ITEM / QUANTIDADE</th>
-                <th style="text-align: right; padding-bottom: 4px; font-size: 12px;">VALOR</th>
+              <tr style="border-top: 2px solid #000; border-bottom: 2px solid #000;">
+                <th style="text-align: left; padding: 6px 0; font-size: 13px; font-weight: 900;">QTD / ITEM</th>
+                <th style="text-align: right; padding: 6px 0; font-size: 13px; font-weight: 900;">VALOR</th>
               </tr>
             </thead>
             <tbody>
@@ -827,11 +843,11 @@ export default function Mesas() {
           <div class="totals-box">
             ${orderToPrint.discount && orderToPrint.discount > 0 ? `
               <div class="total-row">
-                <span>Subtotal:</span>
+                <span>SUBTOTAL:</span>
                 <span>R$ ${orderSubtotal.toFixed(2).replace(".", ",")}</span>
               </div>
-              <div class="total-row" style="color: #dc2626;">
-                <span>Desconto Concedido:</span>
+              <div class="total-row">
+                <span>DESCONTO:</span>
                 <span>- R$ ${Number(orderToPrint.discount).toFixed(2).replace(".", ",")}</span>
               </div>
             ` : ""}
@@ -842,14 +858,14 @@ export default function Mesas() {
           </div>
 
           <div class="info-box">
-            <strong>CONTA EM ABERTO PARA CONFERÊNCIA</strong><br>
+            <strong style="font-size: 14px; font-weight: 900;">CONTA EM ABERTO PARA CONFERÊNCIA</strong><br>
             Aguardando fechamento e pagamento.<br>
-            <span>Aceitamos: Dinheiro, Cartão e PIX</span>
+            <span style="display: block; margin-top: 4px; font-weight: 900;">Formas aceitas: Dinheiro, Cartão e PIX</span>
           </div>
 
           <div class="footer">
             <p style="margin: 2px 0;">Favor conferir os itens antes de pagar.</p>
-            <p style="margin: 2px 0; font-weight: bold;">Agradecemos a preferência! Volte sempre!</p>
+            <p style="margin: 2px 0; font-size: 14px; font-weight: 900;">Obrigado pela preferência! Volte sempre!</p>
           </div>
 
           <script>
@@ -1115,9 +1131,9 @@ export default function Mesas() {
           totalSales: increment(Number(total) || 0),
         });
         handlePrint(orderData);
-        navigate("/");
+        navigate("/balcao");
       } else {
-        navigate("/fiados");
+        navigate("/balcao");
       }
     } catch (error: any) {
       alert(

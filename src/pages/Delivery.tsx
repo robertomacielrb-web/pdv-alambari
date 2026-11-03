@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   collection,
   query,
@@ -61,6 +62,7 @@ interface CashierSession {
 }
 
 export default function Delivery() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -1477,10 +1479,20 @@ export default function Delivery() {
                 onClick={() => {
                   setLastPassword(null);
                   setLastOrder(null);
+                  navigate("/balcao");
                 }}
-                className="w-full bg-orange-600 text-white py-3 rounded-lg font-bold hover:bg-orange-700"
+                className="w-full bg-orange-600 text-white py-3 rounded-lg font-bold hover:bg-orange-700 shadow-md transition-colors"
               >
-                Nova Entrega
+                Concluir e Retornar ao Balcão
+              </button>
+              <button
+                onClick={() => {
+                  setLastPassword(null);
+                  setLastOrder(null);
+                }}
+                className="w-full bg-gray-100 text-gray-700 py-2.5 rounded-lg font-bold hover:bg-gray-200 text-sm transition-colors"
+              >
+                Permanecer no Delivery
               </button>
             </div>
           </div>

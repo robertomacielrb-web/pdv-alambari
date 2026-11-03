@@ -23,12 +23,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ShoppingBag,
-  ListChecks
+  ListChecks,
+  Bluetooth
 } from 'lucide-react';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useCashierAuth } from '../contexts/CashierAuthContext';
 import { useStoreSettings } from '../contexts/StoreSettingsContext';
 import { useFullscreen } from '../contexts/FullscreenContext';
+import { useBluetoothPrinter } from '../contexts/BluetoothPrinterContext';
 import NotificationPermissionBanner from './NotificationPermissionBanner';
 import NotificationToastContainer from './NotificationToastContainer';
 import NotificationCenterModal from './NotificationCenterModal';
@@ -61,6 +63,7 @@ export default function Layout() {
   const { isAuthenticated: isCashierAuthed, requireAuth: isCashierAuthRequired } = useCashierAuth();
   const { logoUrl, storeName } = useStoreSettings();
   const { isFullscreen, toggleFullscreen } = useFullscreen();
+  const { isConnected: isPrinterConnected, deviceName: printerDeviceName, openModal: openPrinterModal, printMode } = useBluetoothPrinter();
 
   const navigation = [
     { name: 'Caixa', href: '/', icon: Calculator },
@@ -121,6 +124,22 @@ export default function Layout() {
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-green-500 rounded-full ring-2 ring-gray-900" />
             ) : (
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full animate-pulse ring-2 ring-gray-900" />
+            )}
+          </button>
+          <button
+            onClick={openPrinterModal}
+            className={cn(
+              "p-2 rounded-lg transition-colors relative",
+              isPrinterConnected
+                ? "text-emerald-400 hover:text-emerald-300 hover:bg-gray-800"
+                : "text-gray-300 hover:text-white hover:bg-gray-800"
+            )}
+            title={isPrinterConnected ? `Impressora Bluetooth Conectada: ${printerDeviceName || 'Térmica'}` : "Conectar Impressora Bluetooth"}
+            aria-label="Impressora Bluetooth"
+          >
+            <Bluetooth className="h-5 w-5" />
+            {isPrinterConnected && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-emerald-400 rounded-full ring-2 ring-gray-900 animate-pulse" />
             )}
           </button>
           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-gray-300 hover:text-white rounded-lg hover:bg-gray-800">
@@ -314,6 +333,53 @@ export default function Layout() {
                 }`}
               >
                 {permission === 'granted' ? 'Ativo' : 'Aviso'}
+              </span>
+            )}
+          </button>
+
+          {/* Quick Bluetooth Printer Widget */}
+          <button
+            onClick={openPrinterModal}
+            className={cn(
+              "rounded-xl bg-gray-800/60 hover:bg-gray-800 border transition-all group cursor-pointer",
+              isPrinterConnected ? "border-emerald-700/60" : "border-gray-700/60",
+              isSidebarCollapsed
+                ? "w-full p-2.5 flex items-center justify-center relative"
+                : "w-full flex items-center justify-between p-2.5 text-left"
+            )}
+            title={isPrinterConnected ? `Impressora Bluetooth: ${printerDeviceName || 'Conectada'}` : "Conectar Impressora Térmica Bluetooth"}
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="relative">
+                <Bluetooth className={cn(
+                  "w-4 h-4 transition-colors shrink-0",
+                  isPrinterConnected ? "text-emerald-400" : "text-gray-300 group-hover:text-white"
+                )} />
+                {isPrinterConnected && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full ring-1 ring-gray-900 animate-pulse" />
+                )}
+              </div>
+              {!isSidebarCollapsed && (
+                <div className="flex flex-col truncate max-w-[120px]">
+                  <span className="text-xs font-bold text-gray-200 leading-none mb-0.5 truncate">
+                    {isPrinterConnected ? (printerDeviceName || 'Impressora BT') : 'Impressora BT'}
+                  </span>
+                  <span className="text-[10px] text-gray-400 leading-none">
+                    {isPrinterConnected ? 'Pronta p/ Cupom' : printMode === 'bluetooth' ? 'Clique p/ Conectar' : 'Modo Navegador'}
+                  </span>
+                </div>
+              )}
+            </div>
+            {!isSidebarCollapsed && (
+              <span
+                className={cn(
+                  "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider",
+                  isPrinterConnected
+                    ? "bg-emerald-900/60 text-emerald-400 border border-emerald-700/50"
+                    : "bg-gray-700 text-gray-300 border border-gray-600"
+                )}
+              >
+                {isPrinterConnected ? 'Online' : 'Conectar'}
               </span>
             )}
           </button>

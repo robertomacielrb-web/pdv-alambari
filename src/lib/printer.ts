@@ -1,64 +1,125 @@
+type ConnectionListener = (connected: boolean, deviceName: string | null) => void;
+
 export class BluetoothPrinter {
   private device: BluetoothDevice | null = null;
   private server: BluetoothRemoteGATTServer | null = null;
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
+  private listeners: Set<ConnectionListener> = new Set();
 
-  async connect() {
+  isSupported(): boolean {
+    return typeof navigator !== 'undefined' && 'bluetooth' in navigator;
+  }
+
+  addConnectionListener(fn: ConnectionListener): () => void {
+    this.listeners.add(fn);
+    return () => {
+      this.listeners.delete(fn);
+    };
+  }
+
+  private notify(connected: boolean) {
+    const name = this.getDeviceName();
+    this.listeners.forEach((fn) => {
+      try {
+        fn(connected, name);
+      } catch (err) {
+        console.error('Error in printer connection listener:', err);
+      }
+    });
+  }
+
+  getDeviceName(): string | null {
+    return this.device?.name || null;
+  }
+
+  async connect(): Promise<boolean> {
     try {
-      if (!navigator.bluetooth) {
-        throw new Error('Navegador não suporta Web Bluetooth API. No iPhone/iPad essa função é bloqueada pela Apple (utilize "Impressão Padrão"). Em Android, use o Chrome ou Edge.');
+      if (!this.isSupported()) {
+        throw new Error(
+          'Navegador não suporta Web Bluetooth API. No iPhone/iPad essa função é bloqueada pela Apple (utilize "Impressão Padrão"). Em computadores e Android, utilize o Google Chrome ou Edge.'
+        );
       }
 
+      // Serviços comuns de impressoras térmicas ESC/POS (58mm e 80mm portáteis e de bancada)
       const knownServices = [
-        '000018f0-0000-1000-8000-00805f9b34fb',
-        'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-        '49535343-fe7d-4ae5-8fa9-9fafd205e455',
-        '0000e0ff-0000-1000-8000-00805f9b34fb',
-        '0000ff00-0000-1000-8000-00805f9b34fb',
-        '0000af30-0000-1000-8000-00805f9b34fb'
+        '000018f0-0000-1000-8000-00805f9b34fb', // Standard 16-bit 0x18F0 ESC/POS
+        'e7810a71-73ae-499d-8c15-faa9aef0c3f2', // Mini POS Bluetooth
+        '49535343-fe7d-4ae5-8fa9-9fafd205e455', // ISSC Transparent (POS-58)
+        '0000fff0-0000-1000-8000-00805f9b34fb', // Goojprt / POS-5802 / PeriPage (0xFFF0)
+        '0000ae00-0000-1000-8000-00805f9b34fb', // MPT-II / Chinese Portable (0xAE00)
+        '0000ae30-0000-1000-8000-00805f9b34fb', // 0xAE30
+        '0000e0ff-0000-1000-8000-00805f9b34fb', // 0xE0FF
+        '0000ff00-0000-1000-8000-00805f9b34fb', // 0xFF00
+        '0000af30-0000-1000-8000-00805f9b34fb', // 0xAF30
+        '0000fee7-0000-1000-8000-00805f9b34fb', // Tencent IoT Thermal
+        '00001101-0000-1000-8000-00805f9b34fb', // SPP Serial Port Profile
       ];
 
       this.device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: knownServices
+        optionalServices: knownServices,
       });
 
-      this.server = await this.device.gatt?.connect() || null;
-      if (!this.server) throw new Error('Não foi possível conectar ao GATT server da impressora');
+      // Configura listener de desconexão automática
+      this.device.addEventListener('gattserverdisconnected', () => {
+        this.server = null;
+        this.characteristic = null;
+        this.notify(false);
+      });
 
-      let service: BluetoothRemoteGATTService | null = null;
-      for (const sUuid of knownServices) {
-        try {
-          service = await this.server.getPrimaryService(sUuid);
-          if (service) break;
-        } catch (_) {}
+      this.server = (await this.device.gatt?.connect()) || null;
+      if (!this.server) {
+        throw new Error('Não foi possível conectar ao servidor GATT da impressora');
       }
 
-      if (!service) {
+      // Procura primeiro pelos serviços conhecidos
+      let foundWritable: BluetoothRemoteGATTCharacteristic | null = null;
+
+      for (const sUuid of knownServices) {
         try {
-          const services = await this.server.getPrimaryServices();
-          if (services && services.length > 0) {
-            service = services[0];
+          const service = await this.server.getPrimaryService(sUuid);
+          const chars = await service.getCharacteristics();
+          const writable = chars.find(
+            (c) => c.properties.write || c.properties.writeWithoutResponse
+          );
+          if (writable) {
+            foundWritable = writable;
+            break;
           }
         } catch (_) {}
       }
 
-      if (!service) {
-        service = await this.server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
+      // Se não encontrou nos serviços específicos, varre todos os serviços disponíveis
+      if (!foundWritable) {
+        try {
+          const services = await this.server.getPrimaryServices();
+          for (const s of services) {
+            try {
+              const chars = await s.getCharacteristics();
+              const writable = chars.find(
+                (c) => c.properties.write || c.properties.writeWithoutResponse
+              );
+              if (writable) {
+                foundWritable = writable;
+                break;
+              }
+            } catch (_) {}
+          }
+        } catch (_) {}
       }
 
-      // Procura a característica gravável
-      const characteristics = await service.getCharacteristics();
-      const writable = characteristics.find(c => c.properties.write || c.properties.writeWithoutResponse);
-      if (writable) {
-        this.characteristic = writable;
-      } else {
-        this.characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
+      if (!foundWritable) {
+        throw new Error(
+          'Impressora conectada, mas nenhuma porta de escrita compatível foi encontrada.'
+        );
       }
 
+      this.characteristic = foundWritable;
+      this.notify(true);
       return true;
     } catch (error) {
       console.error('Bluetooth connection error:', error);
+      this.notify(false);
       throw error;
     }
   }
@@ -190,11 +251,16 @@ export class BluetoothPrinter {
 
   disconnect() {
     if (this.device && this.device.gatt?.connected) {
-      this.device.gatt.disconnect();
+      try {
+        this.device.gatt.disconnect();
+      } catch (err) {
+        console.error('Error disconnecting printer:', err);
+      }
     }
     this.device = null;
     this.server = null;
     this.characteristic = null;
+    this.notify(false);
   }
 }
 

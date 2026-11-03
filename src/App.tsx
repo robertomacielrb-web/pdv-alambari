@@ -5,6 +5,8 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import { CashierAuthProvider } from './contexts/CashierAuthContext';
 import { StoreSettingsProvider } from './contexts/StoreSettingsContext';
 import { FullscreenProvider } from './contexts/FullscreenContext';
+import { BluetoothPrinterProvider } from './contexts/BluetoothPrinterContext';
+import BluetoothPrinterModal from './components/BluetoothPrinterModal';
 import Layout from './components/Layout';
 import Caixa from './pages/Caixa';
 import Balcao from './pages/Balcao';
@@ -56,9 +58,12 @@ export default function App() {
         <NotificationProvider>
           <CashierAuthProvider>
             <FullscreenProvider>
-              <HashRouter>
-                <AppRoutes />
-              </HashRouter>
+              <BluetoothPrinterProvider>
+                <HashRouter>
+                  <AppRoutes />
+                  <BluetoothPrinterModal />
+                </HashRouter>
+              </BluetoothPrinterProvider>
             </FullscreenProvider>
           </CashierAuthProvider>
         </NotificationProvider>

@@ -1,14 +1,37 @@
-import { thermalPrinter, formatOrderToText } from './printer';
+import { thermalPrinter } from './printer';
 
 export interface PrintOptions {
   customerOnly?: boolean;
   productionOnly?: boolean;
 }
 
+export function openBrowserPrintWindow(htmlContent: string) {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert("Bloqueador de pop-ups impediu a impressão. Por favor, permita pop-ups para este site nas configurações do navegador.");
+    return false;
+  }
+  printWindow.document.write(htmlContent);
+  printWindow.document.close();
+  return true;
+}
+
 export async function executePrint(order: any, htmlContent: string, options?: PrintOptions) {
   const printMode = localStorage.getItem('printMode') || 'browser';
 
   if (printMode === 'bluetooth') {
+    if (!thermalPrinter.isConnected()) {
+      const wantBrowser = window.confirm(
+        'Atenção: A impressão está configurada para "Impressora Bluetooth Térmica", mas nenhuma impressora está conectada no momento.\n\n' +
+        'Deseja imprimir agora através da janela do navegador (Impressão Padrão)?\n\n' +
+        '(Para conectar sua impressora Bluetooth, clique no ícone de Bluetooth no topo da tela ou vá em Configurações).'
+      );
+      if (wantBrowser) {
+        openBrowserPrintWindow(htmlContent);
+      }
+      return;
+    }
+
     try {
       const prefCustomer = localStorage.getItem('printCopiesCustomer') !== 'false';
       const prefProduction = localStorage.getItem('printCopiesProduction') !== 'false';
@@ -21,22 +44,18 @@ export async function executePrint(order: any, htmlContent: string, options?: Pr
       });
       return;
     } catch (e: any) {
-      console.error(e);
-      if (e.message?.includes('não conectada') || e.message?.includes('not connected') || e.name === 'NetworkError') {
-        alert('Impressora Bluetooth não conectada. Conecte na tela de Configurações ou mude para Impressão Padrão.');
-      } else {
-        alert('Falha na impressão bluetooth: ' + (e.message || 'Erro desconhecido'));
+      console.error('Falha na impressão Bluetooth:', e);
+      const wantBrowser = window.confirm(
+        `Falha na comunicação com a impressora Bluetooth: ${e.message || 'Erro de transmissão'}.\n\n` +
+        'Deseja imprimir esta comanda através do navegador como alternativa?'
+      );
+      if (wantBrowser) {
+        openBrowserPrintWindow(htmlContent);
       }
-      return; // Stop and let user decide if they want to fallback manually
+      return;
     }
   }
 
-  // Fallback to browser HTML print
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    alert("Bloqueador de pop-ups impediu a impressão. Por favor, permita pop-ups para este site.");
-    return;
-  }
-  printWindow.document.write(htmlContent);
-  printWindow.document.close();
+  // Fallback / Padrão: Navegador
+  openBrowserPrintWindow(htmlContent);
 }

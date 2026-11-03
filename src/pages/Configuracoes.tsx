@@ -49,6 +49,7 @@ import { useNotifications } from '../contexts/NotificationContext';
 import { useCashierAuth } from '../contexts/CashierAuthContext';
 import { useStoreSettings } from '../contexts/StoreSettingsContext';
 import { useFullscreen } from '../contexts/FullscreenContext';
+import { useBluetoothPrinter } from '../contexts/BluetoothPrinterContext';
 import { compressAndResizeImage } from '../lib/imageCompressor';
 import { DEFAULT_DELIVERY_REGIONS, DeliveryRegion } from '../data/deliveryRegions';
 
@@ -62,11 +63,23 @@ export default function Configuracoes() {
     clearError: clearFullscreenError,
   } = useFullscreen();
 
-  const [printMode, setPrintMode] = useState<'browser' | 'bluetooth'>('browser');
-  const [printCopiesCustomer, setPrintCopiesCustomer] = useState(true);
-  const [printCopiesProduction, setPrintCopiesProduction] = useState(true);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const {
+    isSupported: isBtSupported,
+    isConnected,
+    isConnecting: isLoading,
+    deviceName,
+    printMode,
+    setPrintMode,
+    paperWidth,
+    setPaperWidth,
+    printCopiesCustomer,
+    setPrintCopiesCustomer,
+    printCopiesProduction,
+    setPrintCopiesProduction,
+    connect: handleConnectBtContext,
+    disconnect: handleDisconnectBt,
+    testPrint: runTestPrint,
+  } = useBluetoothPrinter();
   
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [pixKey, setPixKey] = useState('');
@@ -368,20 +381,14 @@ export default function Configuracoes() {
 
   const handleModeChange = (mode: 'browser' | 'bluetooth') => {
     setPrintMode(mode);
-    localStorage.setItem('printMode', mode);
   };
 
   const handleConnectBluetooth = async () => {
-    setIsLoading(true);
-    try {
-      await thermalPrinter.connect();
-      setIsConnected(true);
-      handleModeChange('bluetooth');
-      alert('Impressora conectada com sucesso!');
-    } catch (error: any) {
-      alert('Erro ao conectar impressora: ' + error.message);
-    } finally {
-      setIsLoading(false);
+    const res = await handleConnectBtContext();
+    if (res.success) {
+      alert('Impressora conectada com sucesso via Web Bluetooth!');
+    } else {
+      alert('Erro ao conectar impressora: ' + (res.error || 'Tente novamente'));
     }
   };
 
@@ -391,21 +398,11 @@ export default function Configuracoes() {
       return;
     }
 
-    try {
-      await thermalPrinter.print(
-        '================================\n' +
-        '     TESTE RAPIDO IMPRESSORA    \n' +
-        '     PDV ALAMBARI DEFUMADOS     \n' +
-        '================================\n' +
-        'Status: Conexao Bluetooth OK\n' +
-        `Data:   ${new Date().toLocaleString('pt-BR')}\n` +
-        formatCustomerSenhaHighlight('042') +
-        '   Destaque Senha Grande OK!    \n' +
-        '================================\n'
-      );
-      alert('Página de teste simples com destaque de senha enviada para a impressora!');
-    } catch (error: any) {
-      alert('Erro ao imprimir: ' + error.message);
+    const res = await runTestPrint('simple');
+    if (res.success) {
+      alert('Cupom de teste simples enviado com sucesso para a impressora!');
+    } else {
+      alert('Erro ao imprimir: ' + (res.error || 'Verifique a conexão Bluetooth'));
     }
   };
 
@@ -415,29 +412,11 @@ export default function Configuracoes() {
       return;
     }
 
-    try {
-      const mockOrder = {
-        password: '042',
-        type: 'balcao',
-        createdAt: new Date().toISOString(),
-        customerName: 'Cliente Teste Alambari',
-        items: [
-          { name: 'Costela Defumada Especial', quantity: 1, price: 48.0, observation: 'Bem passada' },
-          { name: 'Refrigerante Lata 350ml', quantity: 2, price: 7.0 }
-        ],
-        total: 62.0,
-        paymentMethod: 'pix',
-        observations: 'Teste de 2 vias (Cliente + Cozinha) com corte automatico'
-      };
-
-      await thermalPrinter.printOrder(mockOrder, {
-        printCustomer: printCopiesCustomer,
-        printProduction: printCopiesProduction,
-      });
-
+    const res = await runTestPrint('complete');
+    if (res.success) {
       alert('Teste de 2 vias (Cliente e Produção) enviado para a impressora Bluetooth com sucesso!');
-    } catch (error: any) {
-      alert('Erro ao imprimir 2 vias: ' + error.message);
+    } else {
+      alert('Erro ao imprimir 2 vias: ' + (res.error || 'Verifique a conexão Bluetooth'));
     }
   };
 
@@ -1305,24 +1284,80 @@ export default function Configuracoes() {
               <h3 className="font-bold text-gray-800">Impressora Bluetooth Térmica</h3>
             </div>
             <p className="text-sm text-gray-600 mb-4">
-              Conexão direta a uma impressora térmica portátil ESC/POS via Bluetooth para imprimir sem tela de diálogo.
+              Conexão direta a uma impressora térmica portátil ESC/POS via Bluetooth para imprimir cupons instantaneamente.
             </p>
 
             {printMode === 'bluetooth' && (
               <div className="space-y-3">
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
+                    <span className="text-xs font-bold text-gray-800">
+                      {isConnected ? `Conectada: ${deviceName || 'Impressora Térmica'}` : 'Nenhuma impressora conectada'}
+                    </span>
+                  </div>
+                  {isConnected && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDisconnectBt();
+                      }}
+                      className="text-[11px] font-bold text-red-600 hover:text-red-700 hover:underline cursor-pointer"
+                    >
+                      Desconectar
+                    </button>
+                  )}
+                </div>
+
                 <button
-                  onClick={handleConnectBluetooth}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleConnectBluetooth();
+                  }}
                   disabled={isLoading}
-                  className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-xs cursor-pointer text-xs sm:text-sm"
                 >
                   <Bluetooth className="w-4 h-4" />
-                  {isLoading ? 'Conectando...' : isConnected ? 'Conectar Outra Impressora' : 'Conectar Impressora Bluetooth'}
+                  {isLoading ? 'Buscando...' : isConnected ? 'Conectar Outra Impressora' : 'Buscar e Conectar Impressora Bluetooth'}
                 </button>
-                {isConnected && (
-                  <span className="text-xs text-green-600 font-bold block text-center mt-1">Conectado na Sessão Atual</span>
-                )}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Seleção de Largura da Bobina (58mm vs 80mm) */}
+        <div className="mt-6 p-4 bg-gray-50 rounded-xl border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h4 className="font-bold text-gray-900 text-sm">Largura do Papel da Impressora Térmica</h4>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Ajusta o número de colunas por linha para o formato exato da sua bobina.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPaperWidth('58mm')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                paperWidth === '58mm'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              Bobina 58mm (32 colunas)
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaperWidth('80mm')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                paperWidth === '80mm'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              Bobina 80mm (48 colunas)
+            </button>
           </div>
         </div>
 

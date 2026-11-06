@@ -47,6 +47,8 @@ interface DeliveryOrder {
   deliveryAddress?: string;
   deliveryRegion?: string;
   deliveryFee?: number;
+  deliveryType?: string;
+  isRetirada?: boolean;
   total: number;
   subtotal?: number;
   discount?: number;
@@ -148,6 +150,11 @@ export default function MotoboyReportModal({
     const sevenDaysAgo = subDays(now, 7);
 
     return orders.filter((order) => {
+      // Exclui pedidos de retirada no balcão (sem taxa de motoboy)
+      if (order.deliveryType === 'retirada' || order.isRetirada) {
+        return false;
+      }
+
       const orderDateStr = order.closedAt || order.createdAt;
       const orderDate = orderDateStr ? parseISO(orderDateStr) : null;
       const orderDayStr = orderDateStr ? orderDateStr.split('T')[0] : '';

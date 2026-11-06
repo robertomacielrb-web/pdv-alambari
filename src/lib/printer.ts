@@ -326,10 +326,10 @@ export function formatCustomerSenhaHighlight(password?: any, tableNumber?: any):
 /**
  * Bloco com destaque visual máximo para a Senha e Mesa na VIA DA PRODUÇÃO / COZINHA
  */
-export function formatProductionSenhaHighlight(password?: any, tableNumber?: any, orderType?: string): string {
+export function formatProductionSenhaHighlight(password?: any, tableNumber?: any, orderType?: string, isRetirada?: boolean): string {
   const pwdStr = formatPasswordDisplay(password);
   const tableStr = tableNumber ? String(tableNumber).trim() : '';
-  const typeStr = orderType === 'delivery' ? 'DELIVERY' : orderType === 'mesa' ? 'MESA' : 'BALCAO';
+  const typeStr = isRetirada ? 'RETIRADA' : orderType === 'delivery' ? 'DELIVERY' : orderType === 'mesa' ? 'MESA' : 'BALCAO';
 
   let block = '';
   block += `${ESC_POS.ALIGN_CENTER}`;
@@ -404,8 +404,9 @@ export function formatCustomerReceiptText(order: any): string {
     text += formatCustomerSenhaHighlight(order.password, order.tableNumber);
   }
 
+  const isRetirada = order.deliveryType === 'retirada' || order.isRetirada;
   if (order.type) {
-    const tipoLabel = order.type === 'delivery' ? 'ENTREGA / DELIVERY' : order.type === 'mesa' ? 'MESA' : 'BALCAO';
+    const tipoLabel = isRetirada ? 'RETIRADA NO BALCAO' : order.type === 'delivery' ? 'ENTREGA / DELIVERY' : order.type === 'mesa' ? 'MESA' : 'BALCAO';
     text += `TIPO: ${tipoLabel}\n`;
   }
   if (order.customerName) {
@@ -414,11 +415,18 @@ export function formatCustomerReceiptText(order: any): string {
   if (order.deliveryPhone) {
     text += `FONE: ${order.deliveryPhone}\n`;
   }
-  if (order.deliveryAddress) {
-    text += `END: ${order.deliveryAddress}\n`;
-  }
-  if (order.deliveryRegion) {
-    text += `REGIAO: ${order.deliveryRegion}\n`;
+  if (isRetirada) {
+    text += `LOCAL: RETIRADA NA LOJA / BALCAO\n`;
+    if (order.deliveryAddress && order.deliveryAddress !== 'Retirada no Balcão' && order.deliveryAddress !== 'Retirada no Balcão (Buscar na Loja)') {
+      text += `OBS RETIRADA: ${order.deliveryAddress}\n`;
+    }
+  } else {
+    if (order.deliveryAddress) {
+      text += `END: ${order.deliveryAddress}\n`;
+    }
+    if (order.deliveryRegion) {
+      text += `REGIAO: ${order.deliveryRegion}\n`;
+    }
   }
 
   text += `--------------------------------\n`;
@@ -441,12 +449,16 @@ export function formatCustomerReceiptText(order: any): string {
   let subtotal = order.total || 0;
   if (order.discount && order.discount > 0) {
     subtotal = (order.total || 0) + order.discount;
-    if (order.type === 'delivery' && order.deliveryFee) subtotal -= order.deliveryFee;
+    if (!isRetirada && order.type === 'delivery' && order.deliveryFee) subtotal -= order.deliveryFee;
     text += `SUBTOTAL:            R$ ${subtotal.toFixed(2).replace('.', ',')}\n`;
-    if (order.type === 'delivery' && order.deliveryFee) {
+    if (isRetirada) {
+      text += `TAXA:                GRATIS (RETIRADA)\n`;
+    } else if (order.type === 'delivery' && order.deliveryFee) {
       text += `TAXA ENTREGA:        R$ ${Number(order.deliveryFee).toFixed(2).replace('.', ',')}\n`;
     }
     text += `DESCONTO:           -R$ ${Number(order.discount).toFixed(2).replace('.', ',')}\n`;
+  } else if (isRetirada) {
+    text += `TAXA:                GRATIS (RETIRADA)\n`;
   } else if (order.type === 'delivery' && order.deliveryFee) {
     text += `TAXA ENTREGA:        R$ ${Number(order.deliveryFee).toFixed(2).replace('.', ',')}\n`;
   }
@@ -501,21 +513,29 @@ export function formatProductionReceiptText(order: any): string {
   text += `DATA: ${dateStr}\n`;
   text += `================================\n`;
 
+  const isRetirada = order.deliveryType === 'retirada' || order.isRetirada;
   // DESTAQUE MAXIMO DA SENHA / MESA NA PRODUCAO
-  text += formatProductionSenhaHighlight(order.password, order.tableNumber, order.type);
+  text += formatProductionSenhaHighlight(order.password, order.tableNumber, order.type, isRetirada);
 
   if (order.type) {
-    const tipoLabel = order.type === 'delivery' ? 'ENTREGA / DELIVERY' : order.type === 'mesa' ? 'MESA' : 'BALCAO';
+    const tipoLabel = isRetirada ? 'RETIRADA NO BALCAO' : order.type === 'delivery' ? 'ENTREGA / DELIVERY' : order.type === 'mesa' ? 'MESA' : 'BALCAO';
     text += `TIPO: ${tipoLabel}\n`;
   }
   if (order.customerName) {
     text += `CLIENTE: ${order.customerName}\n`;
   }
-  if (order.deliveryAddress) {
-    text += `END: ${order.deliveryAddress}\n`;
-  }
-  if (order.deliveryRegion) {
-    text += `REGIAO: ${order.deliveryRegion}\n`;
+  if (isRetirada) {
+    text += `LOCAL: RETIRADA NO BALCAO (CLIENTE BUSCA)\n`;
+    if (order.deliveryAddress && order.deliveryAddress !== 'Retirada no Balcão' && order.deliveryAddress !== 'Retirada no Balcão (Buscar na Loja)') {
+      text += `OBS: ${order.deliveryAddress}\n`;
+    }
+  } else {
+    if (order.deliveryAddress) {
+      text += `END: ${order.deliveryAddress}\n`;
+    }
+    if (order.deliveryRegion) {
+      text += `REGIAO: ${order.deliveryRegion}\n`;
+    }
   }
 
   text += `--------------------------------\n`;

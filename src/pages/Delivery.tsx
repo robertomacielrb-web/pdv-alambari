@@ -31,6 +31,7 @@ import {
   MapPin,
   Bike,
   AlertTriangle,
+  ShoppingBag,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { format } from "date-fns";
@@ -86,6 +87,7 @@ export default function Delivery() {
   const [selectedRegionId, setSelectedRegionId] = useState<string>("");
   const [selectedRegionName, setSelectedRegionName] = useState<string>("");
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
+  const [deliveryType, setDeliveryType] = useState<"entrega" | "retirada">("entrega");
   const [step, setStep] = useState<1 | 2>(1);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingOnlineOrders, setPendingOnlineOrders] = useState<any[]>([]);
@@ -382,14 +384,17 @@ export default function Delivery() {
           </div>
 
           <!-- VIA DO MOTOBOY / CLIENTE -->
-          <div class="receipt-type">VIA DO MOTOBOY</div>
+          <div class="receipt-type">${order.deliveryType === 'retirada' || order.isRetirada ? 'VIA DO CLIENTE (RETIRADA NO BALCÃO)' : 'VIA DO MOTOBOY'}</div>
           <div class="header">
             <h2 style="margin: 0;">PDV ALAMBARI DEFUMADOS</h2>
             <p style="margin: 5px 0;">Data: ${format(new Date(order.closedAt), "dd/MM/yyyy HH:mm")}</p>
-            <h1 style="margin: 10px 0; font-size: 20px;">DELIVERY #${order.password}</h1>
+            <h1 style="margin: 10px 0; font-size: 20px;">${order.deliveryType === 'retirada' || order.isRetirada ? 'RETIRADA NO BALCÃO' : 'DELIVERY'} #${order.password}</h1>
             ${order.customerName ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold;">CLIENTE: ${order.customerName}</p>` : ""}
             ${order.deliveryPhone ? `<p style="margin: 5px 0; font-size: 14px;">TEL: ${order.deliveryPhone}</p>` : ""}
-            ${order.deliveryAddress ? `<p style="margin: 5px 0; font-size: 14px; border: 1px dotted #000; padding: 5px;">ENDEREÇO:<br>${order.deliveryAddress}${order.deliveryRegion ? `<br><span style="display:block;margin-top:4px;font-weight:bold;color:#000;">REGIÃO: ${order.deliveryRegion}</span>` : ""}</p>` : ""}
+            ${(order.deliveryType === 'retirada' || order.isRetirada)
+              ? `<p style="margin: 5px 0; font-size: 14px; border: 1px dotted #000; padding: 5px; background: #fafafa;">MODALIDADE: RETIRADA NA LOJA / BALCÃO${order.deliveryAddress && order.deliveryAddress !== 'Retirada no Balcão (Buscar na Loja)' ? `<br><small style="font-weight: normal;">Obs: ${order.deliveryAddress}</small>` : ''}</p>`
+              : (order.deliveryAddress ? `<p style="margin: 5px 0; font-size: 14px; border: 1px dotted #000; padding: 5px;">ENDEREÇO:<br>${order.deliveryAddress}${order.deliveryRegion ? `<br><span style="display:block;margin-top:4px;font-weight:bold;color:#000;">REGIÃO: ${order.deliveryRegion}</span>` : ""}</p>` : "")
+            }
             ${order.observations ? `<p style="margin: 5px 0; font-weight: bold;">OBS: ${order.observations}</p>` : ""}
           </div>
           <table>
@@ -410,7 +415,7 @@ export default function Delivery() {
           </div>
           <div class="total" style="font-weight: normal;">
             <span>Taxa Entrega:</span>
-            <span>R$ ${(order.deliveryFee || 0).toFixed(2).replace(".", ",")}</span>
+            <span>${order.deliveryType === 'retirada' || order.isRetirada ? 'Grátis (Retirada)' : `R$ ${(order.deliveryFee || 0).toFixed(2).replace(".", ",")}`}</span>
           </div>
           ${order.discount && order.discount > 0 ? `
           <div class="total" style="font-weight: normal;">
@@ -430,12 +435,15 @@ export default function Delivery() {
           <div class="cut-line page-break"><span>✂-----------------------</span></div>
 
           <!-- VIA DA PRODUÇÃO -->
-          <div class="receipt-type">VIA DA PRODUÇÃO</div>
+          <div class="receipt-type">${order.deliveryType === 'retirada' || order.isRetirada ? 'VIA DA PRODUÇÃO (RETIRADA NO BALCÃO)' : 'VIA DA PRODUÇÃO'}</div>
           <div class="header">
-            <h1 style="margin: 10px 0; font-size: 26px;">DELIVERY #${order.password}</h1>
+            <h1 style="margin: 10px 0; font-size: 26px;">${order.deliveryType === 'retirada' || order.isRetirada ? 'RETIRADA' : 'DELIVERY'} #${order.password}</h1>
             <p style="margin: 5px 0;">Data: ${format(new Date(order.closedAt), "dd/MM/yyyy HH:mm")}</p>
             ${order.customerName ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold;">CLIENTE: ${order.customerName}</p>` : ""}
-            ${order.deliveryAddress ? `<p style="margin: 5px 0; font-size: 14px; border: 1px dotted #000; padding: 5px;">ENDEREÇO: ${order.deliveryAddress}${order.deliveryRegion ? ` (${order.deliveryRegion})` : ""}</p>` : ""}
+            ${(order.deliveryType === 'retirada' || order.isRetirada)
+              ? `<p style="margin: 5px 0; font-size: 14px; border: 1px dotted #000; padding: 5px; background: #eee;">LOCAL: RETIRADA NO BALCÃO (CLIENTE RETIRA NA LOJA)</p>`
+              : (order.deliveryAddress ? `<p style="margin: 5px 0; font-size: 14px; border: 1px dotted #000; padding: 5px;">ENDEREÇO: ${order.deliveryAddress}${order.deliveryRegion ? ` (${order.deliveryRegion})` : ""}</p>` : "")
+            }
             ${order.observations ? `<p style="margin: 5px 0; font-size: 16px; font-weight: bold; border: 2px solid #000; padding: 5px;">OBS GERAL: ${order.observations}</p>` : ""}
           </div>
           <table>
@@ -465,26 +473,34 @@ export default function Delivery() {
 
   const handleLoadPendingOrder = (order: any) => {
     setActivePendingOrderId(order.id);
+    const isRetirada = order.deliveryType === 'retirada' || order.isRetirada === true;
+    setDeliveryType(isRetirada ? "retirada" : "entrega");
     setCustomerName(order.customerName || "");
     setAddress(order.deliveryAddress || "");
     setPhoneNumber(order.deliveryPhone || "");
     setObservations(order.observations || "");
-    if (order.deliveryFee !== undefined && order.deliveryFee !== null) {
-      setDeliveryFee(Number(order.deliveryFee));
-    }
-    if (order.deliveryRegion) {
-      setSelectedRegionName(order.deliveryRegion);
-      const matched = availableRegions.find(
-        (r) => r.name.toLowerCase() === String(order.deliveryRegion).toLowerCase() || r.id === order.deliveryRegion
-      );
-      if (matched) {
-        setSelectedRegionId(matched.id);
-      } else {
-        setSelectedRegionId("custom");
-      }
-    } else {
+    if (isRetirada) {
+      setDeliveryFee(0);
       setSelectedRegionId("");
       setSelectedRegionName("");
+    } else {
+      if (order.deliveryFee !== undefined && order.deliveryFee !== null) {
+        setDeliveryFee(Number(order.deliveryFee));
+      }
+      if (order.deliveryRegion) {
+        setSelectedRegionName(order.deliveryRegion);
+        const matched = availableRegions.find(
+          (r) => r.name.toLowerCase() === String(order.deliveryRegion).toLowerCase() || r.id === order.deliveryRegion
+        );
+        if (matched) {
+          setSelectedRegionId(matched.id);
+        } else {
+          setSelectedRegionId("custom");
+        }
+      } else {
+        setSelectedRegionId("");
+        setSelectedRegionName("");
+      }
     }
     if (order.paymentMethod && ["dinheiro", "cartao", "pix"].includes(order.paymentMethod)) {
       setPaymentMethod(order.paymentMethod);
@@ -505,6 +521,7 @@ export default function Delivery() {
 
   const handleDiscardActiveOrder = () => {
     setActivePendingOrderId(null);
+    setDeliveryType("entrega");
     setCart([]);
     setCustomerName("");
     setAddress("");
@@ -541,11 +558,11 @@ export default function Delivery() {
     }
     if (cart.length === 0 || isProcessing) return;
     if (!customerName.trim()) {
-      alert("O nome do cliente é obrigatório para entrega!");
+      alert("O nome do cliente é obrigatório!");
       return;
     }
-    if (!address.trim()) {
-      alert("O endereço é obrigatório para entrega!");
+    if (deliveryType === "entrega" && !address.trim()) {
+      alert("O endereço é obrigatório para entrega a domicílio!");
       return;
     }
 
@@ -568,9 +585,17 @@ export default function Delivery() {
     setIsProcessing(true);
     try {
       const password = await getNextPassword(currentSession.id);
+      const isRetiradaOrder = deliveryType === "retirada";
+      const finalAddress = isRetiradaOrder
+        ? (address.trim() || "Retirada no Balcão (Buscar na Loja)")
+        : address.trim();
+      const finalRegion = isRetiradaOrder ? "Retirada no Balcão" : (selectedRegionName || "");
+      const finalFee = isRetiradaOrder ? 0 : (Number(deliveryFee) || 0);
 
       const orderData = {
         type: "delivery",
+        deliveryType: deliveryType,
+        isRetirada: isRetiradaOrder,
         status: "closed",
         items: cart.map((item) => ({
           productId: item.id || "unknown",
@@ -584,11 +609,11 @@ export default function Delivery() {
         discount: Number(discount) || 0,
         paymentMethod: paymentMethod || "dinheiro",
         splitPayments: finalSplitPayments || [],
-        customerName,
-        deliveryPhone: phoneNumber,
-        deliveryAddress: address,
-        deliveryFee: Number(deliveryFee) || 0,
-        deliveryRegion: selectedRegionName || "",
+        customerName: customerName.trim(),
+        deliveryPhone: phoneNumber.trim(),
+        deliveryAddress: finalAddress,
+        deliveryFee: finalFee,
+        deliveryRegion: finalRegion,
         observations,
         createdAt: new Date().toISOString(),
         closedAt: new Date().toISOString(),
@@ -612,6 +637,7 @@ export default function Delivery() {
       setLastPassword(password);
       setCart([]);
       setActivePendingOrderId(null);
+      setDeliveryType("entrega");
       setCustomerName("");
       setAddress("");
       setPhoneNumber("");
@@ -698,58 +724,72 @@ export default function Delivery() {
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {pendingOnlineOrders.map((ord) => (
-                  <div
-                    key={ord.id}
-                    className={`inline-flex items-center rounded-lg border shadow-xs text-xs font-bold transition-all overflow-hidden ${
-                      activePendingOrderId === ord.id
-                        ? 'bg-amber-700 text-white border-amber-800 ring-2 ring-amber-400'
-                        : 'bg-white text-amber-900 border-amber-300 hover:border-amber-400'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => handleLoadPendingOrder(ord)}
-                      className="px-3 py-1.5 flex items-center gap-1.5 hover:bg-amber-600/20 cursor-pointer"
+                {pendingOnlineOrders.map((ord) => {
+                  const isRetirada = ord.deliveryType === 'retirada' || ord.isRetirada;
+                  return (
+                    <div
+                      key={ord.id}
+                      className={`inline-flex items-center rounded-lg border shadow-xs text-xs font-bold transition-all overflow-hidden ${
+                        activePendingOrderId === ord.id
+                          ? isRetirada ? 'bg-emerald-700 text-white border-emerald-800 ring-2 ring-emerald-400' : 'bg-amber-700 text-white border-amber-800 ring-2 ring-amber-400'
+                          : isRetirada ? 'bg-emerald-50 text-emerald-950 border-emerald-300 hover:border-emerald-400' : 'bg-white text-amber-900 border-amber-300 hover:border-amber-400'
+                      }`}
                     >
-                      <span>{ord.customerName || 'Cliente Online'}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[11px] font-extrabold ${
-                        activePendingOrderId === ord.id ? 'bg-amber-900 text-amber-200' : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        R$ {Number(ord.total || 0).toFixed(2).replace('.', ',')}
-                      </span>
-                      <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.2 rounded font-black ${
-                        activePendingOrderId === ord.id ? 'bg-amber-900 text-white' : 'bg-amber-600 text-white'
-                      }`}>
-                        {activePendingOrderId === ord.id ? 'Carregado' : 'Abrir'}
-                      </span>
-                    </button>
-                    {/* Botão para excluir pedido que entra no delivery */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOrderToDelete(ord);
-                      }}
-                      className="px-2 py-1.5 text-red-500 hover:text-white hover:bg-red-600 border-l border-amber-200 hover:border-red-600 transition-colors cursor-pointer"
-                      title="Excluir este pedido do delivery"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+                      <button
+                        type="button"
+                        onClick={() => handleLoadPendingOrder(ord)}
+                        className="px-3 py-1.5 flex items-center gap-1.5 hover:bg-black/10 cursor-pointer"
+                      >
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${
+                          isRetirada ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'
+                        }`}>
+                          {isRetirada ? '🛍️ Retirada' : '🛵 Entrega'}
+                        </span>
+                        <span>{ord.customerName || 'Cliente Online'}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[11px] font-extrabold ${
+                          activePendingOrderId === ord.id ? 'bg-black/30 text-white' : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          R$ {Number(ord.total || 0).toFixed(2).replace('.', ',')}
+                        </span>
+                        <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.2 rounded font-black ${
+                          activePendingOrderId === ord.id ? 'bg-black/40 text-white' : isRetirada ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'
+                        }`}>
+                          {activePendingOrderId === ord.id ? 'Carregado' : 'Abrir'}
+                        </span>
+                      </button>
+                      {/* Botão para excluir pedido que entra no delivery */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOrderToDelete(ord);
+                        }}
+                        className="px-2 py-1.5 text-red-500 hover:text-white hover:bg-red-600 border-l border-amber-200 hover:border-red-600 transition-colors cursor-pointer"
+                        title="Excluir este pedido do delivery"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
 
           {/* Banner de Pedido em Atendimento Ativo */}
           {activePendingOrderId && (
-            <div className="bg-orange-100/90 border-b border-orange-200 px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-orange-950 font-bold">
+            <div className={`${
+              deliveryType === 'retirada' ? 'bg-emerald-100/90 border-emerald-200 text-emerald-950' : 'bg-orange-100/90 border-orange-200 text-orange-950'
+            } border-b px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-bold`}>
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-orange-600 animate-pulse"></span>
+                <span className={`w-2.5 h-2.5 rounded-full ${deliveryType === 'retirada' ? 'bg-emerald-600' : 'bg-orange-600'} animate-pulse`}></span>
                 <span>
-                  Atendendo Pedido Recebido Online de: <strong className="underline text-orange-900">{customerName || 'Cliente'}</strong>
-                  {deliveryFee > 0 && (
+                  Atendendo Pedido {deliveryType === 'retirada' ? 'de Retirada no Balcão' : 'Recebido Online'} de: <strong className="underline">{customerName || 'Cliente'}</strong>
+                  {deliveryType === 'retirada' ? (
+                    <span className="ml-1.5 bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded font-black">
+                      🛍️ Retirada (Sem Taxa)
+                    </span>
+                  ) : deliveryFee > 0 && (
                     <span className="ml-1.5 bg-orange-200 text-orange-900 px-1.5 py-0.5 rounded font-black">
                       Taxa: R$ {Number(deliveryFee).toFixed(2).replace('.', ',')}
                     </span>
@@ -912,7 +952,7 @@ export default function Delivery() {
               >
                 <div className="flex items-center">
                   <ShoppingCart className="w-6 h-6 mr-3" />
-                  <span>Configurar Entrega</span>
+                  <span>Configurar Entrega / Retirada</span>
                 </div>
                 <span>R$ {subtotal.toFixed(2).replace(".", ",")}</span>
               </motion.button>
@@ -1066,13 +1106,64 @@ export default function Delivery() {
           </div>
           
           <div className="w-full md:w-[40%] bg-gray-50 flex flex-col border-t md:border-t-0 md:h-full relative overflow-y-auto">
-             <div className="p-4 border-b sticky top-0 bg-gray-50 z-10 flex items-center gap-2">
-                 <Truck className="w-5 h-5 text-gray-600" />
-                 <h2 className="text-lg font-bold text-gray-800">Dados da Entrega</h2>
+             <div className="p-4 border-b sticky top-0 bg-gray-50 z-10 space-y-2.5">
+                 <div className="flex items-center gap-2">
+                     {deliveryType === "retirada" ? (
+                       <ShoppingBag className="w-5 h-5 text-emerald-600" />
+                     ) : (
+                       <Truck className="w-5 h-5 text-orange-600" />
+                     )}
+                     <h2 className="text-lg font-bold text-gray-800">
+                       {deliveryType === "retirada" ? "Retirada no Balcão" : "Dados da Entrega"}
+                     </h2>
+                 </div>
+
+                 {/* Toggle Entrega vs Retirada no Balcão */}
+                 <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-200/80 rounded-xl">
+                   <button
+                     type="button"
+                     onClick={() => setDeliveryType("entrega")}
+                     className={`py-2 px-3 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                       deliveryType === "entrega"
+                         ? "bg-white text-orange-700 shadow-sm ring-1 ring-orange-300"
+                         : "text-gray-600 hover:text-gray-900"
+                     }`}
+                   >
+                     <Truck className="w-4 h-4 text-orange-600 shrink-0" />
+                     <span>🛵 Entrega</span>
+                   </button>
+                   <button
+                     type="button"
+                     onClick={() => {
+                       setDeliveryType("retirada");
+                       setDeliveryFee(0);
+                       setSelectedRegionId("");
+                       setSelectedRegionName("");
+                     }}
+                     className={`py-2 px-3 rounded-lg font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                       deliveryType === "retirada"
+                         ? "bg-white text-emerald-800 shadow-sm ring-1 ring-emerald-300"
+                         : "text-gray-600 hover:text-gray-900"
+                     }`}
+                   >
+                     <ShoppingBag className="w-4 h-4 text-emerald-600 shrink-0" />
+                     <span>🛍️ Retirada</span>
+                   </button>
+                 </div>
              </div>
              
             {/* Dados do Cliente e Observações */}
             <div className="p-4 space-y-4">
+              {deliveryType === "retirada" && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 flex items-start gap-2.5">
+                  <span className="text-base leading-none">🛍️</span>
+                  <div>
+                    <p className="font-bold">Retirada no Balcão (Cliente busca na loja)</p>
+                    <p className="text-emerald-800 mt-0.5">Sem taxa de entrega. O cliente retira o pedido diretamente no balcão.</p>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
                   Nome do Cliente <span className="text-red-500">*</span>
@@ -1099,179 +1190,201 @@ export default function Delivery() {
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
-                  Endereço Completo <span className="text-red-500">*</span>
+                  {deliveryType === "retirada" ? (
+                    "Local / Observação de Retirada (Opcional)"
+                  ) : (
+                    <>Endereço Completo <span className="text-red-500">*</span></>
+                  )}
                 </label>
                 <textarea
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Rua, Número, Bairro, Referência..."
+                  placeholder={
+                    deliveryType === "retirada"
+                      ? "Retirada no Balcão (ou observação sobre quem vai buscar)"
+                      : "Rua, Número, Bairro, Referência..."
+                  }
                   className="w-full border-2 border-gray-200 rounded-xl p-3 h-20 focus:border-orange-500 outline-none resize-none"
                 />
               </div>
-              {/* Região e Taxa de Entrega Pré-definidas com Edição Livre */}
-              <div className="space-y-3 bg-white p-3.5 rounded-2xl border-2 border-orange-100 shadow-xs">
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-bold text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
-                      <MapPin className="w-4 h-4 text-orange-600" />
-                      Região de Entrega
-                    </label>
-                    {selectedRegionName && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedRegionId("");
-                          setSelectedRegionName("");
-                        }}
-                        className="text-[11px] text-gray-500 hover:text-red-600 underline font-semibold cursor-pointer"
-                      >
-                        Limpar seleção
-                      </button>
-                    )}
-                  </div>
 
-                  <select
-                    value={selectedRegionId}
-                    onChange={(e) => {
-                      const regionId = e.target.value;
-                      setSelectedRegionId(regionId);
-                      if (!regionId) {
-                        setSelectedRegionName("");
-                        return;
-                      }
-                      if (regionId === "custom") {
-                        setSelectedRegionName("Personalizado / Outro");
-                        return;
-                      }
-                      const found = availableRegions.find((r) => r.id === regionId);
-                      if (found) {
-                        setSelectedRegionName(found.name);
-                        setDeliveryFee(found.fee);
-                      }
-                    }}
-                    className="w-full border-2 border-gray-200 rounded-xl p-2.5 text-sm font-bold text-gray-800 bg-white focus:border-orange-500 outline-none"
-                  >
-                    <option value="">Selecione a região pré-definida...</option>
-                    {availableRegions.map((region) => (
-                      <option key={region.id} value={region.id}>
-                        {region.name} — R$ {region.fee.toFixed(2).replace('.', ',')}
-                      </option>
-                    ))}
-                    <option value="custom">Outro local / Taxa personalizada</option>
-                  </select>
-
-                  {/* Atalhos rápidos das regiões para clique direto */}
-                  <div className="mt-2.5">
-                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                      Toque rápido na região:
-                    </p>
-                    <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1 bg-gray-50 rounded-xl border border-gray-200">
-                      {availableRegions.map((region) => {
-                        const isSelected = selectedRegionId === region.id;
-                        return (
-                          <button
-                            key={region.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedRegionId(region.id);
-                              setSelectedRegionName(region.name);
-                              setDeliveryFee(region.fee);
-                            }}
-                            className={`p-2 rounded-lg text-left text-xs font-bold transition-all flex items-center justify-between gap-1 border cursor-pointer ${
-                              isSelected
-                                ? "bg-orange-600 text-white border-orange-600 shadow-sm ring-2 ring-orange-300"
-                                : "bg-white text-gray-700 border-gray-200 hover:border-orange-300 hover:bg-orange-50/50"
-                            }`}
-                          >
-                            <span className="truncate" title={region.name}>{region.name}</span>
-                            <span
-                              className={`shrink-0 px-1.5 py-0.5 rounded text-[11px] font-black ${
-                                isSelected ? "bg-orange-800 text-white" : "bg-orange-100 text-orange-900"
-                              }`}
-                            >
-                              R$ {region.fee}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Campo de valor da taxa (sempre livre para editar) */}
-                <div className="pt-2 border-t border-gray-100">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest">
-                      Taxa de Entrega (R$)
-                    </label>
-                    <span className="text-[11px] text-gray-500 font-semibold">
-                      (Valor editável a qualquer momento)
-                    </span>
-                  </div>
+              {deliveryType === "retirada" ? (
+                /* Card de Taxa Grátis na Retirada */
+                <div className="bg-white p-3.5 rounded-2xl border-2 border-emerald-100 shadow-xs flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">
-                        R$
-                      </span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.50"
-                        value={deliveryFee === 0 ? "" : deliveryFee}
-                        onChange={(e) => {
-                          const val = e.target.value === "" ? 0 : parseFloat(e.target.value);
-                          setDeliveryFee(isNaN(val) ? 0 : val);
-                        }}
-                        placeholder="0,00"
-                        className="w-full border-2 border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:border-orange-500 outline-none font-black text-lg text-gray-800 bg-white"
-                      />
-                    </div>
-                    {deliveryFee > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDeliveryFee(0);
-                          setSelectedRegionId("");
-                          setSelectedRegionName("");
-                        }}
-                        className="px-3 py-2.5 text-xs font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
-                      >
-                        Zerar Taxa
-                      </button>
-                    )}
+                    <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                    <span className="text-xs font-bold text-gray-700">Taxa de Entrega:</span>
                   </div>
-
-                  {selectedRegionName && (
-                    <div className="mt-2 text-xs bg-orange-50 border border-orange-200 rounded-lg p-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-orange-900">
-                      <div>
-                        <span>Região: <strong>{selectedRegionName}</strong></span>
-                        {(() => {
-                          const matched = availableRegions.find((r) => r.id === selectedRegionId);
-                          if (matched && matched.fee !== Number(deliveryFee)) {
-                            return (
-                              <span className="block text-[11px] text-amber-800 font-medium mt-0.5">
-                                • Valor alterado manualmente (taxa padrão era R$ {matched.fee.toFixed(2).replace('.', ',')})
-                              </span>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </div>
-                      {!address.includes(selectedRegionName) && (
+                  <span className="text-xs font-black bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
+                    Grátis (Retirada no Balcão)
+                  </span>
+                </div>
+              ) : (
+                /* Região e Taxa de Entrega Pré-definidas com Edição Livre */
+                <div className="space-y-3 bg-white p-3.5 rounded-2xl border-2 border-orange-100 shadow-xs">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-gray-700 uppercase tracking-widest flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-orange-600" />
+                        Região de Entrega
+                      </label>
+                      {selectedRegionName && (
                         <button
                           type="button"
                           onClick={() => {
-                            setAddress((prev) => (prev ? `${prev} - ${selectedRegionName}` : selectedRegionName));
+                            setSelectedRegionId("");
+                            setSelectedRegionName("");
                           }}
-                          className="text-orange-700 hover:text-orange-900 underline font-bold text-left sm:text-right shrink-0 cursor-pointer"
+                          className="text-[11px] text-gray-500 hover:text-red-600 underline font-semibold cursor-pointer"
                         >
-                          + Adicionar ao Endereço
+                          Limpar seleção
                         </button>
                       )}
                     </div>
-                  )}
+
+                    <select
+                      value={selectedRegionId}
+                      onChange={(e) => {
+                        const regionId = e.target.value;
+                        setSelectedRegionId(regionId);
+                        if (!regionId) {
+                          setSelectedRegionName("");
+                          return;
+                        }
+                        if (regionId === "custom") {
+                          setSelectedRegionName("Personalizado / Outro");
+                          return;
+                        }
+                        const found = availableRegions.find((r) => r.id === regionId);
+                        if (found) {
+                          setSelectedRegionName(found.name);
+                          setDeliveryFee(found.fee);
+                        }
+                      }}
+                      className="w-full border-2 border-gray-200 rounded-xl p-2.5 text-sm font-bold text-gray-800 bg-white focus:border-orange-500 outline-none"
+                    >
+                      <option value="">Selecione a região pré-definida...</option>
+                      {availableRegions.map((region) => (
+                        <option key={region.id} value={region.id}>
+                          {region.name} — R$ {region.fee.toFixed(2).replace('.', ',')}
+                        </option>
+                      ))}
+                      <option value="custom">Outro local / Taxa personalizada</option>
+                    </select>
+
+                    {/* Atalhos rápidos das regiões para clique direto */}
+                    <div className="mt-2.5">
+                      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                        Toque rápido na região:
+                      </p>
+                      <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-1 bg-gray-50 rounded-xl border border-gray-200">
+                        {availableRegions.map((region) => {
+                          const isSelected = selectedRegionId === region.id;
+                          return (
+                            <button
+                              key={region.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedRegionId(region.id);
+                                setSelectedRegionName(region.name);
+                                setDeliveryFee(region.fee);
+                              }}
+                              className={`p-2 rounded-lg text-left text-xs font-bold transition-all flex items-center justify-between gap-1 border cursor-pointer ${
+                                isSelected
+                                  ? "bg-orange-600 text-white border-orange-600 shadow-sm ring-2 ring-orange-300"
+                                  : "bg-white text-gray-700 border-gray-200 hover:border-orange-300 hover:bg-orange-50/50"
+                              }`}
+                            >
+                              <span className="truncate" title={region.name}>{region.name}</span>
+                              <span
+                                className={`shrink-0 px-1.5 py-0.5 rounded text-[11px] font-black ${
+                                  isSelected ? "bg-orange-800 text-white" : "bg-orange-100 text-orange-900"
+                                }`}
+                              >
+                                R$ {region.fee}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Campo de valor da taxa (sempre livre para editar) */}
+                  <div className="pt-2 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest">
+                        Taxa de Entrega (R$)
+                      </label>
+                      <span className="text-[11px] text-gray-500 font-semibold">
+                        (Valor editável a qualquer momento)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">
+                          R$
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.50"
+                          value={deliveryFee === 0 ? "" : deliveryFee}
+                          onChange={(e) => {
+                            const val = e.target.value === "" ? 0 : parseFloat(e.target.value);
+                            setDeliveryFee(isNaN(val) ? 0 : val);
+                          }}
+                          placeholder="0,00"
+                          className="w-full border-2 border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:border-orange-500 outline-none font-black text-lg text-gray-800 bg-white"
+                        />
+                      </div>
+                      {deliveryFee > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeliveryFee(0);
+                            setSelectedRegionId("");
+                            setSelectedRegionName("");
+                          }}
+                          className="px-3 py-2.5 text-xs font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                        >
+                          Zerar Taxa
+                        </button>
+                      )}
+                    </div>
+
+                    {selectedRegionName && (
+                      <div className="mt-2 text-xs bg-orange-50 border border-orange-200 rounded-lg p-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-orange-900">
+                        <div>
+                          <span>Região: <strong>{selectedRegionName}</strong></span>
+                          {(() => {
+                            const matched = availableRegions.find((r) => r.id === selectedRegionId);
+                            if (matched && matched.fee !== Number(deliveryFee)) {
+                              return (
+                                <span className="block text-[11px] text-amber-800 font-medium mt-0.5">
+                                  • Valor alterado manualmente (taxa padrão era R$ {matched.fee.toFixed(2).replace('.', ',')})
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+                        {!address.includes(selectedRegionName) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddress((prev) => (prev ? `${prev} - ${selectedRegionName}` : selectedRegionName));
+                            }}
+                            className="text-orange-700 hover:text-orange-900 underline font-bold text-left sm:text-right shrink-0 cursor-pointer"
+                          >
+                            + Adicionar ao Endereço
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">
                   Observações Gerais
@@ -1397,7 +1510,7 @@ export default function Delivery() {
                 className="w-full bg-orange-600 text-white py-4 rounded-xl font-bold text-xl shadow-lg hover:bg-orange-700 hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all"
               >
                 <CheckCircle className="w-6 h-6 mr-2" />
-                {isProcessing ? "Lançando..." : "Lançar Entrega"}
+                {isProcessing ? "Lançando..." : (deliveryType === 'retirada' ? "Lançar Retirada" : "Lançar Entrega")}
               </button>
 
               {activePendingOrderId && (
@@ -1422,14 +1535,14 @@ export default function Delivery() {
       {lastPassword && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-8 max-w-sm w-full text-center">
-            <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-orange-600" />
+            <div className={`w-16 h-16 ${lastOrder?.deliveryType === 'retirada' || lastOrder?.isRetirada ? 'bg-emerald-100' : 'bg-orange-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+              <CheckCircle className={`w-8 h-8 ${lastOrder?.deliveryType === 'retirada' || lastOrder?.isRetirada ? 'text-emerald-600' : 'text-orange-600'}`} />
             </div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">
-              Delivery Lançado!
+              {lastOrder?.deliveryType === 'retirada' || lastOrder?.isRetirada ? 'Retirada Lançada!' : 'Delivery Lançado!'}
             </h2>
             <p className="text-gray-600 mb-6">ID Pedido / Senha:</p>
-            <div className="text-6xl font-black text-orange-600 mb-8 tracking-widest">
+            <div className={`text-6xl font-black ${lastOrder?.deliveryType === 'retirada' || lastOrder?.isRetirada ? 'text-emerald-600' : 'text-orange-600'} mb-8 tracking-widest`}>
               {lastPassword}
             </div>
             <div className="space-y-3">
@@ -1444,16 +1557,28 @@ export default function Delivery() {
                       })
                       .join('\n');
                     
-                    let message = `*Olá, ${lastOrder.customerName}!* Aqui é do Alambari Defumados 🍖\n\nSeu pedido foi confirmado!\n\n`;
-                    message += `*RESUMO DO PEDIDO:*\n${itemsText}\n\n`;
-                    message += `*Subtotal:* R$ ${(Number(lastOrder.total || 0) - Number(lastOrder.deliveryFee || 0)).toFixed(2).replace('.', ',')}\n`;
-                    if (lastOrder.deliveryRegion) {
-                      message += `*Região:* ${lastOrder.deliveryRegion}\n`;
+                    let message = `*Olá, ${lastOrder.customerName || 'Cliente'}!* Aqui é do Alambari Defumados 🍖\n\n`;
+                    if (lastOrder.deliveryType === 'retirada' || lastOrder.isRetirada) {
+                      message += `Seu pedido para *RETIRADA NO BALCÃO* foi confirmado! 🛍️\n\n`;
+                      message += `*Senha / ID:* #${lastOrder.password}\n`;
+                      message += `*Modalidade:* Retirada na Loja (Balcão)\n\n`;
+                      message += `*RESUMO DO PEDIDO:*\n${itemsText}\n\n`;
+                      message += `*Taxa:* Grátis (Retirada)\n`;
+                      message += `*TOTAL:* R$ ${Number(lastOrder.total || 0).toFixed(2).replace('.', ',')}\n\n`;
+                      message += `*Previsão de preparo:* 20 à 35 minutos. Avisaremos assim que estiver pronto para retirar!\n`;
+                      message += `Obrigado pela preferência!`;
+                    } else {
+                      message += `Seu pedido foi confirmado para ENTREGA! 🛵\n\n`;
+                      message += `*RESUMO DO PEDIDO:*\n${itemsText}\n\n`;
+                      message += `*Subtotal:* R$ ${(Number(lastOrder.total || 0) - Number(lastOrder.deliveryFee || 0)).toFixed(2).replace('.', ',')}\n`;
+                      if (lastOrder.deliveryRegion) {
+                        message += `*Região:* ${lastOrder.deliveryRegion}\n`;
+                      }
+                      message += `*Taxa de Entrega:* R$ ${Number(lastOrder.deliveryFee || 0).toFixed(2).replace('.', ',')}\n`;
+                      message += `*TOTAL:* R$ ${Number(lastOrder.total || 0).toFixed(2).replace('.', ',')}\n\n`;
+                      message += `*Previsão de entrega:* 40 à 60 minutos dependendo da sua localidade.\n`;
+                      message += `Obrigado pela preferência!`;
                     }
-                    message += `*Taxa de Entrega:* R$ ${Number(lastOrder.deliveryFee || 0).toFixed(2).replace('.', ',')}\n`;
-                    message += `*TOTAL:* R$ ${Number(lastOrder.total || 0).toFixed(2).replace('.', ',')}\n\n`;
-                    message += `*Previsão de entrega:* 40 à 60 minutos dependendo da sua localidade.\n`;
-                    message += `Obrigado pela preferência!`;
 
                     const phoneObj = lastOrder.deliveryPhone ? lastOrder.deliveryPhone.replace(/\D/g, '') : '';
                     const phoneUrl = phoneObj.length >= 10 ? `https://wa.me/55${phoneObj}` : 'https://wa.me/';

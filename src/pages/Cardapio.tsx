@@ -33,6 +33,7 @@ export default function Cardapio() {
   const [lastWhatsappUrl, setLastWhatsappUrl] = useState<string>("");
 
   // Checkout Form
+  const [orderMode, setOrderMode] = useState<"entrega" | "retirada">("entrega");
   const [customerName, setCustomerName] = useState("");
   const [address, setAddress] = useState("");
   const [selectedRegionId, setSelectedRegionId] = useState<string>("");
@@ -158,11 +159,16 @@ export default function Cardapio() {
   };
 
   const subtotal = cart.reduce((sum, item) => sum + parsedPrice(item.price) * item.quantity, 0);
-  const finalTotal = subtotal + (deliveryFee || 0);
+  const finalTotal = subtotal + (orderMode === "retirada" ? 0 : (deliveryFee || 0));
 
   const handleSendOrder = async () => {
-    if (!customerName.trim() || !address.trim()) {
-      alert("Por favor, preencha seu nome e endereço para a entrega.");
+    if (!customerName.trim()) {
+      alert("Por favor, preencha seu nome para identificação do pedido.");
+      return;
+    }
+
+    if (orderMode === "entrega" && !address.trim()) {
+      alert("Por favor, preencha seu endereço para a entrega.");
       return;
     }
 
@@ -176,10 +182,17 @@ export default function Cardapio() {
           : cleanedDigits;
     }
 
+    const isRetirada = orderMode === "retirada";
+    const finalAddress = isRetirada ? (address.trim() || "Retirada no Balcão (Buscar na Loja)") : address.trim();
+    const finalRegion = isRetirada ? "Retirada no Balcão" : (selectedRegionName || "");
+    const finalFee = isRetirada ? 0 : (Number(deliveryFee) || 0);
+
     // Also register order in Firestore so PDV/Kitchen receives instant Push Notification & Audio Chime
     try {
       const orderPayload = {
         type: "delivery",
+        deliveryType: orderMode,
+        isRetirada: isRetirada,
         status: "open",
         items: cart.map((item) => ({
           productId: item.id || "unknown",
@@ -192,10 +205,10 @@ export default function Cardapio() {
         })),
         total: Number(finalTotal) || 0,
         subtotal: Number(subtotal) || 0,
-        deliveryFee: Number(deliveryFee) || 0,
-        deliveryRegion: selectedRegionName || "",
+        deliveryFee: finalFee,
+        deliveryRegion: finalRegion,
         customerName: customerName.trim(),
-        deliveryAddress: address.trim(),
+        deliveryAddress: finalAddress,
         paymentMethod,
         observations: observations.trim(),
         createdAt: new Date().toISOString(),
@@ -221,34 +234,56 @@ export default function Cardapio() {
       })
       .join("\n");
 
-    let message = `*NOVO PEDIDO (DELIVERY)* 🛵\n\n`;
-    message += `*Cliente:* ${customerName.trim()}\n`;
-    message += `*Endereço:* ${address.trim()}\n`;
-    if (selectedRegionName) {
-      message += `*Região de Entrega:* ${selectedRegionName}\n`;
-    }
-    message += `\n*ITENS DO PEDIDO:*\n${itemsText}\n\n`;
     const paymentLabels = {
       dinheiro: "Dinheiro",
       cartao: "Cartão",
       pix: "PIX",
     };
 
-    message += `*Subtotal:* R$ ${subtotal.toFixed(2).replace(".", ",")}\n`;
-    if (deliveryFee > 0) {
-      message += `*Taxa de Entrega:* R$ ${deliveryFee.toFixed(2).replace(".", ",")}\n`;
-    } else if (selectedRegionName) {
-      message += `*Taxa de Entrega:* Grátis\n`;
+    let message = "";
+    if (isRetirada) {
+      message = `*NOVO PEDIDO (RETIRADA NO BALCÃO)* 🛍️\n\n`;
+      message += `*Cliente:* ${customerName.trim()}\n`;
+      message += `*Modalidade:* Retirada na Loja (Cliente retira no balcão)\n`;
+      if (address.trim()) {
+        message += `*Obs. Identificação/Retirada:* ${address.trim()}\n`;
+      }
+      message += `\n*ITENS DO PEDIDO:*\n${itemsText}\n\n`;
+      message += `*Subtotal:* R$ ${subtotal.toFixed(2).replace(".", ",")}\n`;
+      message += `*Taxa de Entrega:* Grátis (Retirada)\n`;
+      message += `*TOTAL DO PEDIDO: R$ ${finalTotal.toFixed(2).replace(".", ",")}*\n\n`;
+      message += `*Forma de Pagamento:* ${paymentLabels[paymentMethod]}\n`;
+      if (paymentMethod === "dinheiro" && troco) {
+        message += `*Troco para:* R$ ${troco}\n`;
+      }
+      if (observations.trim()) {
+        message += `*Observações Gerais:*\n${observations.trim()}\n`;
+      }
+      message += `\n_Avisem-me assim que estiver pronto para eu retirar no balcão!_`;
     } else {
-      message += `*Taxa de Entrega:* A confirmar\n`;
-    }
-    message += `*TOTAL DO PEDIDO: R$ ${finalTotal.toFixed(2).replace(".", ",")}*\n\n`;
-    message += `*Forma de Pagamento:* ${paymentLabels[paymentMethod]}\n`;
-    if (paymentMethod === "dinheiro" && troco) {
-      message += `*Troco para:* R$ ${troco}\n`;
-    }
-    if (observations.trim()) {
-      message += `*Observações Gerais:*\n${observations.trim()}\n`;
+      message = `*NOVO PEDIDO (DELIVERY)* 🛵\n\n`;
+      message += `*Cliente:* ${customerName.trim()}\n`;
+      message += `*Endereço:* ${address.trim()}\n`;
+      if (selectedRegionName) {
+        message += `*Região de Entrega:* ${selectedRegionName}\n`;
+      }
+      message += `\n*ITENS DO PEDIDO:*\n${itemsText}\n\n`;
+      message += `*Subtotal:* R$ ${subtotal.toFixed(2).replace(".", ",")}\n`;
+      if (deliveryFee > 0) {
+        message += `*Taxa de Entrega:* R$ ${deliveryFee.toFixed(2).replace(".", ",")}\n`;
+      } else if (selectedRegionName) {
+        message += `*Taxa de Entrega:* Grátis\n`;
+      } else {
+        message += `*Taxa de Entrega:* A confirmar\n`;
+      }
+      message += `*TOTAL DO PEDIDO: R$ ${finalTotal.toFixed(2).replace(".", ",")}*\n\n`;
+      message += `*Forma de Pagamento:* ${paymentLabels[paymentMethod]}\n`;
+      if (paymentMethod === "dinheiro" && troco) {
+        message += `*Troco para:* R$ ${troco}\n`;
+      }
+      if (observations.trim()) {
+        message += `*Observações Gerais:*\n${observations.trim()}\n`;
+      }
     }
 
     const encodedMessage = encodeURIComponent(message);
@@ -454,154 +489,242 @@ export default function Cardapio() {
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 space-y-5">
-            <h2 className="text-xl font-black text-gray-800 flex items-center gap-2 border-b pb-4">
-              <MapPin className="w-6 h-6 text-orange-600" />
-              Onde Entregar?
-            </h2>
-
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">
-                Seu Nome <span className="text-red-500">*</span>
+            {/* Modalidade: Entrega vs Retirada */}
+            <div className="border-b pb-5">
+              <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2.5">
+                Como você deseja receber seu pedido?
               </label>
-              <input
-                type="text"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="Ex: João da Silva"
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:border-orange-500 focus:bg-white transition-colors"
-                required
-              />
-            </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setOrderMode("entrega")}
+                  className={`flex items-center justify-center gap-2 p-3 sm:p-3.5 rounded-xl font-black text-xs sm:text-sm transition-all cursor-pointer border-2 ${
+                    orderMode === "entrega"
+                      ? "border-orange-600 bg-orange-50 text-orange-800 shadow-sm ring-2 ring-orange-200"
+                      : "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <Truck className="w-4 h-4 text-orange-600 shrink-0" />
+                  <span>🛵 Entrega em Casa</span>
+                </button>
 
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">
-                Endereço Completo <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Rua, Número, Bairro, Ponto de Referência..."
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 h-24 resize-none outline-none focus:border-orange-500 focus:bg-white transition-colors"
-                required
-              />
-            </div>
-
-            {/* Região / Bairro de Entrega */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-sm font-bold text-gray-700 flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-orange-600" />
-                  Região / Bairro de Entrega
-                </label>
-                {selectedRegionName && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedRegionId("");
-                      setSelectedRegionName("");
-                      setDeliveryFee(0);
-                    }}
-                    className="text-xs text-gray-500 hover:text-red-600 underline font-medium cursor-pointer"
-                  >
-                    Remover
-                  </button>
-                )}
-              </div>
-
-              <select
-                value={selectedRegionId}
-                onChange={(e) => {
-                  const regId = e.target.value;
-                  setSelectedRegionId(regId);
-                  if (!regId) {
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderMode("retirada");
+                    setSelectedRegionId("");
                     setSelectedRegionName("");
                     setDeliveryFee(0);
-                    return;
-                  }
-                  if (regId === "other") {
-                    setSelectedRegionName("Outra Região");
-                    setDeliveryFee(0);
-                    return;
-                  }
-                  const found = availableRegions.find((r) => r.id === regId);
-                  if (found) {
-                    setSelectedRegionName(found.name);
-                    setDeliveryFee(found.fee);
-                  }
-                }}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:border-orange-500 focus:bg-white transition-colors font-semibold text-gray-800 text-sm"
-              >
-                <option value="">Selecione seu bairro ou região...</option>
-                {availableRegions.map((region) => (
-                  <option key={region.id} value={region.id}>
-                    {region.name} — Taxa: R$ {region.fee.toFixed(2).replace('.', ',')}
-                  </option>
-                ))}
-                <option value="other">Outra localidade (consultar taxa)</option>
-              </select>
+                  }}
+                  className={`flex items-center justify-center gap-2 p-3 sm:p-3.5 rounded-xl font-black text-xs sm:text-sm transition-all cursor-pointer border-2 ${
+                    orderMode === "retirada"
+                      ? "border-emerald-600 bg-emerald-50 text-emerald-900 shadow-sm ring-2 ring-emerald-200"
+                      : "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <ShoppingBag className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>🛍️ Retirar no Balcão</span>
+                </button>
+              </div>
+            </div>
 
-              {/* Botões rápidos das regiões */}
-              <div className="mt-2.5">
-                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                  Selecione rapidamente seu bairro:
-                </p>
-                <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-gray-100/70 rounded-xl border border-gray-200">
-                  {availableRegions.map((region) => {
-                    const isSelected = selectedRegionId === region.id;
-                    return (
-                      <button
-                        key={region.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedRegionId(region.id);
-                          setSelectedRegionName(region.name);
-                          setDeliveryFee(region.fee);
-                        }}
-                        className={`text-xs p-2 rounded-lg font-bold flex items-center justify-between gap-1 transition-all cursor-pointer border ${
-                          isSelected
-                            ? "bg-orange-600 text-white shadow-sm ring-2 ring-orange-300 border-orange-600"
-                            : "bg-white text-gray-700 hover:bg-orange-50 hover:text-orange-800 border-gray-200"
-                        }`}
-                      >
-                        <span className="truncate" title={region.name}>{region.name}</span>
-                        <span
-                          className={`shrink-0 px-1.5 py-0.5 rounded text-[11px] font-black ${
-                            isSelected ? "bg-orange-800 text-white" : "bg-orange-100 text-orange-900"
-                          }`}
-                        >
-                          R$ {region.fee}
-                        </span>
-                      </button>
-                    );
-                  })}
+            {orderMode === "retirada" ? (
+              /* CARD DE RETIRADA NO BALCÃO */
+              <div className="space-y-4">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 font-bold text-xl shadow-xs">
+                    🛍️
+                  </div>
+                  <div>
+                    <h3 className="font-black text-emerald-950 text-sm sm:text-base">
+                      Retirada no Balcão (Buscar na Loja)
+                    </h3>
+                    <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
+                      Você <strong>não paga taxa de entrega</strong>! Quando seu pedido estiver pronto, avisaremos você pelo WhatsApp para retirar no balcão da loja.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">
+                    Seu Nome Completo <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Ex: Carlos Silva"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:border-emerald-500 focus:bg-white transition-colors font-medium"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">
+                    Observação de Retirada (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Ex: Vou buscar em 20 minutos / Meu irmão vai retirar..."
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:border-emerald-500 focus:bg-white transition-colors"
+                  />
                 </div>
               </div>
+            ) : (
+              /* CAMPOS DE ENTREGA EM DOMICÍLIO */
+              <>
+                <h2 className="text-xl font-black text-gray-800 flex items-center gap-2 border-b pb-4">
+                  <MapPin className="w-6 h-6 text-orange-600" />
+                  Onde Entregar?
+                </h2>
 
-              {selectedRegionName && (
-                <div className="mt-2 text-xs bg-orange-50 text-orange-900 border border-orange-200 rounded-lg p-2.5 flex items-center justify-between">
-                  <span>
-                    Taxa para <strong>{selectedRegionName}</strong>: <strong>{deliveryFee > 0 ? `R$ ${deliveryFee.toFixed(2).replace('.', ',')}` : 'A consultar'}</strong>
-                  </span>
-                  {!address.includes(selectedRegionName) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAddress((prev) => (prev ? `${prev} - ${selectedRegionName}` : selectedRegionName));
-                      }}
-                      className="text-orange-700 underline font-bold hover:text-orange-900 cursor-pointer ml-2"
-                    >
-                      + Incluir no endereço
-                    </button>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">
+                    Seu Nome <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Ex: João da Silva"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:border-orange-500 focus:bg-white transition-colors"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">
+                    Endereço Completo <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="Rua, Número, Bairro, Ponto de Referência..."
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 h-24 resize-none outline-none focus:border-orange-500 focus:bg-white transition-colors"
+                    required
+                  />
+                </div>
+
+                {/* Região / Bairro de Entrega */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-bold text-gray-700 flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-orange-600" />
+                      Região / Bairro de Entrega
+                    </label>
+                    {selectedRegionName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRegionId("");
+                          setSelectedRegionName("");
+                          setDeliveryFee(0);
+                        }}
+                        className="text-xs text-gray-500 hover:text-red-600 underline font-medium cursor-pointer"
+                      >
+                        Remover
+                      </button>
+                    )}
+                  </div>
+
+                  <select
+                    value={selectedRegionId}
+                    onChange={(e) => {
+                      const regId = e.target.value;
+                      setSelectedRegionId(regId);
+                      if (!regId) {
+                        setSelectedRegionName("");
+                        setDeliveryFee(0);
+                        return;
+                      }
+                      if (regId === "other") {
+                        setSelectedRegionName("Outra Região");
+                        setDeliveryFee(0);
+                        return;
+                      }
+                      const found = availableRegions.find((r) => r.id === regId);
+                      if (found) {
+                        setSelectedRegionName(found.name);
+                        setDeliveryFee(found.fee);
+                      }
+                    }}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 outline-none focus:border-orange-500 focus:bg-white transition-colors font-semibold text-gray-800 text-sm"
+                  >
+                    <option value="">Selecione seu bairro ou região...</option>
+                    {availableRegions.map((region) => (
+                      <option key={region.id} value={region.id}>
+                        {region.name} — Taxa: R$ {region.fee.toFixed(2).replace('.', ',')}
+                      </option>
+                    ))}
+                    <option value="other">Outra localidade (consultar taxa)</option>
+                  </select>
+
+                  {/* Botões rápidos das regiões */}
+                  <div className="mt-2.5">
+                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                      Selecione rapidamente seu bairro:
+                    </p>
+                    <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-gray-100/70 rounded-xl border border-gray-200">
+                      {availableRegions.map((region) => {
+                        const isSelected = selectedRegionId === region.id;
+                        return (
+                          <button
+                            key={region.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedRegionId(region.id);
+                              setSelectedRegionName(region.name);
+                              setDeliveryFee(region.fee);
+                            }}
+                            className={`text-xs p-2 rounded-lg font-bold flex items-center justify-between gap-1 transition-all cursor-pointer border ${
+                              isSelected
+                                ? "bg-orange-600 text-white shadow-sm ring-2 ring-orange-300 border-orange-600"
+                                : "bg-white text-gray-700 hover:bg-orange-50 hover:text-orange-800 border-gray-200"
+                            }`}
+                          >
+                            <span className="truncate" title={region.name}>{region.name}</span>
+                            <span
+                              className={`shrink-0 px-1.5 py-0.5 rounded text-[11px] font-black ${
+                                isSelected ? "bg-orange-800 text-white" : "bg-orange-100 text-orange-900"
+                              }`}
+                            >
+                              R$ {region.fee}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {selectedRegionName && (
+                    <div className="mt-2 text-xs bg-orange-50 text-orange-900 border border-orange-200 rounded-lg p-2.5 flex items-center justify-between">
+                      <span>
+                        Taxa para <strong>{selectedRegionName}</strong>: <strong>{deliveryFee > 0 ? `R$ ${deliveryFee.toFixed(2).replace('.', ',')}` : 'A consultar'}</strong>
+                      </span>
+                      {!address.includes(selectedRegionName) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAddress((prev) => (prev ? `${prev} - ${selectedRegionName}` : selectedRegionName));
+                          }}
+                          className="text-orange-700 underline font-bold hover:text-orange-900 cursor-pointer ml-2"
+                        >
+                          + Incluir no endereço
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 space-y-5">
             <h2 className="text-xl font-black text-gray-800 flex items-center gap-2 border-b pb-4">
               <Smartphone className="w-6 h-6 text-orange-600" />
-              Pagamento na Entrega
+              {orderMode === "retirada" ? "Pagamento na Retirada" : "Pagamento na Entrega"}
             </h2>
 
             <div className="grid grid-cols-3 gap-2">
@@ -709,11 +832,22 @@ export default function Cardapio() {
                   </div>
                   <div className="flex justify-between items-center text-xs sm:text-sm font-semibold text-gray-700">
                     <span className="flex items-center gap-1">
-                      <Truck className="w-3.5 h-3.5 text-orange-600" />
-                      Taxa de Entrega:
+                      {orderMode === "retirada" ? (
+                        <>
+                          <ShoppingBag className="w-3.5 h-3.5 text-emerald-600" />
+                          Retirada no Balcão:
+                        </>
+                      ) : (
+                        <>
+                          <Truck className="w-3.5 h-3.5 text-orange-600" />
+                          Taxa de Entrega:
+                        </>
+                      )}
                     </span>
-                    <span className={deliveryFee > 0 ? "font-bold text-gray-800" : "text-amber-700"}>
-                      {deliveryFee > 0
+                    <span className={orderMode === "retirada" ? "font-bold text-emerald-600" : (deliveryFee > 0 ? "font-bold text-gray-800" : "text-amber-700")}>
+                      {orderMode === "retirada"
+                        ? "Grátis (Sem taxa)"
+                        : deliveryFee > 0
                         ? `R$ ${deliveryFee.toFixed(2).replace(".", ",")}`
                         : selectedRegionName
                         ? "Grátis / A combinar"

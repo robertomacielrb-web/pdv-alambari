@@ -25,6 +25,7 @@ import {
   QrCode,
   Search,
   Filter,
+  ShoppingCart,
 } from "lucide-react";
 import { format } from "date-fns";
 import { executePrint } from "../lib/printHelper";
@@ -80,6 +81,7 @@ export default function Fiados() {
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"produtos" | "conta">("conta");
 
   useEffect(() => {
     // Get open cashier session
@@ -160,16 +162,20 @@ export default function Fiados() {
 
   const openFiadoModal = (fiado: Order) => {
     setSelectedFiado(fiado);
-    setCart((fiado.items || []).map((item: any) => ({
+    const initialItems = (fiado.items || []).map((item: any) => ({
       ...item,
       id: item.id || item.productId || "unknown",
-    })));
+    }));
+    setCart(initialItems);
+    setIsConfirmingDelete(false);
+    setMobileTab(initialItems.length > 0 ? "conta" : "produtos");
   };
 
   const closeFiadoModal = () => {
     setSelectedFiado(null);
     setCart([]);
     setDiscount("");
+    setIsConfirmingDelete(false);
   };
 
   const [isCreatingFiado, setIsCreatingFiado] = useState(false);
@@ -607,12 +613,12 @@ export default function Fiados() {
 
       {/* Edit Fiado Modal */}
       {selectedFiado && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden">
-            <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-5xl h-[95vh] sm:h-[90vh] max-h-[880px] flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-3.5 sm:p-4 border-b bg-gray-50 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-gray-800 flex items-center">
-                  Conta:
+                <h2 className="text-lg sm:text-xl font-bold text-gray-800 flex items-center">
+                  <span className="text-gray-500">Conta:</span>
                   <input
                     type="text"
                     value={selectedFiado.customerName}
@@ -641,24 +647,59 @@ export default function Fiados() {
                         }
                       }
                     }}
-                    className="ml-2 bg-transparent border-b border-dashed border-gray-400 focus:border-red-500 outline-none text-xl font-bold text-gray-800 w-auto min-w-[200px]"
+                    className="ml-2 bg-transparent border-b border-dashed border-gray-400 focus:border-red-500 outline-none text-base sm:text-xl font-black text-gray-900 w-auto min-w-[160px] sm:min-w-[200px]"
                   />
                 </h2>
               </div>
               <button
+                type="button"
                 onClick={closeFiadoModal}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                title="Fechar modal"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-              {/* Products List */}
-              <div className="flex-1 border-r flex flex-col bg-gray-50 overflow-hidden">
-                <div className="p-4 flex flex-col gap-3 shrink-0 bg-white border-b">
-                  <h3 className="font-bold text-gray-700">
-                    Adicionar Produtos
+            {/* Abas Mobile para alternar facilmente entre Produtos e Conta/Receber */}
+            <div className="flex md:hidden border-b bg-gray-100 p-1.5 gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setMobileTab("produtos")}
+                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  mobileTab === "produtos"
+                    ? "bg-white text-gray-900 shadow-sm border border-gray-200"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>1. Adicionar Produtos</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileTab("conta")}
+                className={`flex-1 py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  mobileTab === "conta"
+                    ? "bg-red-600 text-white shadow-sm"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <ShoppingCart className="w-3.5 h-3.5" />
+                <span>2. Conta & Receber ({cart.reduce((sum, item) => sum + item.quantity, 0)})</span>
+                <span className="ml-1 font-black">R$ {total.toFixed(2).replace(".", ",")}</span>
+              </button>
+            </div>
+
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
+              {/* Products List (Left Column) */}
+              <div
+                className={`flex-1 border-r flex flex-col bg-gray-50 overflow-hidden min-h-0 ${
+                  mobileTab === "produtos" ? "flex" : "hidden md:flex"
+                }`}
+              >
+                <div className="p-3 sm:p-4 flex flex-col gap-2.5 shrink-0 bg-white border-b">
+                  <h3 className="font-bold text-gray-700 text-sm sm:text-base">
+                    Adicionar Produtos à Conta
                   </h3>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="relative flex-1">
@@ -667,23 +708,23 @@ export default function Fiados() {
                       </div>
                       <input
                         type="text"
-                        placeholder="Buscar..."
+                        placeholder="Buscar produto por nome..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-9 w-full rounded-md border-gray-300 p-2 text-sm focus:border-red-500 border outline-none"
+                        className="pl-9 w-full rounded-xl border-gray-200 p-2 text-sm focus:border-red-500 border-2 outline-none transition-colors"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white border-b overflow-x-auto scrollbar-thin flex p-3 gap-2 whitespace-nowrap shrink-0">
+                <div className="bg-white border-b overflow-x-auto scrollbar-thin flex p-2.5 sm:p-3 gap-2 whitespace-nowrap shrink-0">
                   {categories.map((cat, idx) => (
                     <button
                       key={idx}
                       onClick={() => setSelectedCategory(cat)}
-                      className={`px-4 py-1.5 rounded-full font-bold text-xs transition-all focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 ${
+                      className={`px-3.5 py-1.5 rounded-full font-bold text-xs transition-all focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 cursor-pointer ${
                         selectedCategory === cat
-                          ? "bg-red-600 text-white shadow-md"
+                          ? "bg-red-600 text-white shadow-xs"
                           : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                       }`}
                     >
@@ -692,9 +733,9 @@ export default function Fiados() {
                   ))}
                 </div>
 
-                <div className="p-4 pb-8 flex-1 overflow-y-auto">
+                <div className="p-3 sm:p-4 pb-12 flex-1 overflow-y-auto min-h-0">
                   {Object.entries(groupedProducts).length === 0 ? (
-                    <div className="text-center py-8 text-gray-500 text-sm">
+                    <div className="text-center py-12 text-gray-500 text-sm">
                       Nenhum produto cadastrado ou encontrado.
                     </div>
                   ) : (
@@ -702,10 +743,10 @@ export default function Fiados() {
                       .sort()
                       .map((category) => (
                         <div key={category} className="mb-5">
-                          <h4 className="font-bold text-gray-600 text-sm mb-2 pb-1 border-b uppercase tracking-wider">
+                          <h4 className="font-bold text-gray-600 text-xs mb-2 pb-1 border-b uppercase tracking-wider">
                             {category}
                           </h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                             {groupedProducts[category]
                               .sort((a, b) => a.name.localeCompare(b.name))
                               .map((product, index) => {
@@ -716,22 +757,22 @@ export default function Fiados() {
                                   <button
                                     key={`prod-${product.id}-${index}`}
                                     onClick={() => addToCart(product)}
-                                    className="relative border rounded p-3 text-left hover:border-red-500 bg-white transition-colors group overflow-hidden"
+                                    className="relative border rounded-xl p-3 text-left hover:border-red-500 hover:shadow-xs bg-white transition-all group overflow-hidden cursor-pointer"
                                   >
-                                    <div className="absolute top-0 left-0 w-1 h-full bg-red-100 group-hover:bg-red-500 transition-colors"></div>
-                                    <div className="font-medium text-sm text-gray-800 ml-2">
+                                    <div className="absolute top-0 left-0 w-1.5 h-full bg-red-100 group-hover:bg-red-500 transition-colors"></div>
+                                    <div className="font-bold text-sm text-gray-800 ml-2">
                                       {product.name}
                                     </div>
-                                    <div className="flex justify-between items-center mt-1 ml-2">
-                                      <div className="text-red-600 font-bold text-sm">
+                                    <div className="flex justify-between items-center mt-1.5 ml-2">
+                                      <div className="text-red-600 font-black text-sm">
                                         R${" "}
                                         {product.price
                                           .toFixed(2)
                                           .replace(".", ",")}
                                       </div>
                                       {cartItem && (
-                                        <span className="bg-red-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full">
-                                          {cartItem.quantity}
+                                        <span className="bg-red-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full shadow-xs">
+                                          {cartItem.quantity} un
                                         </span>
                                       )}
                                     </div>
@@ -743,46 +784,95 @@ export default function Fiados() {
                       ))
                   )}
                 </div>
+
+                {/* Barra rápida inferior no mobile para ir para conta */}
+                {cart.length > 0 && (
+                  <div className="md:hidden p-3 bg-white border-t flex items-center justify-between shadow-md shrink-0">
+                    <div className="text-xs">
+                      <span className="text-gray-500 font-semibold">Itens: </span>
+                      <span className="font-black text-gray-900">{cart.reduce((sum, item) => sum + item.quantity, 0)}</span>
+                      <span className="mx-1.5 text-gray-300">|</span>
+                      <span className="font-black text-red-600 text-sm">R$ {total.toFixed(2).replace('.', ',')}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setMobileTab("conta")}
+                      className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
+                    >
+                      <span>Ver Conta & Receber</span>
+                      <CheckCircle className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {/* Cart */}
-              <div className="w-full md:w-96 flex flex-col bg-white">
-                <div className="p-4 border-b bg-gray-50">
-                  <h3 className="font-bold text-gray-700">Itens na Conta</h3>
+              {/* Cart, Payment & Actions (Right Column) */}
+              <div
+                className={`w-full md:w-[420px] lg:w-[450px] flex flex-col bg-white overflow-hidden min-h-0 ${
+                  mobileTab === "conta" ? "flex" : "hidden md:flex"
+                }`}
+              >
+                <div className="p-3 sm:p-4 border-b bg-gray-50 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart className="w-4 h-4 text-red-600" />
+                    <h3 className="font-bold text-gray-800 text-sm sm:text-base">Itens na Conta</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMobileTab("produtos")}
+                      className="md:hidden text-xs bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer"
+                    >
+                      + Produtos
+                    </button>
+                    <span className="bg-red-100 text-red-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                      {cart.reduce((acc, item) => acc + item.quantity, 0)} {cart.reduce((acc, item) => acc + item.quantity, 0) === 1 ? 'item' : 'itens'}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* SCROLLABLE BODY COMPLETO: Garante que Itens, Pagamento, Receber e Apagar Dívida tenham barra de rolagem contínua */}
+                <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 min-h-0">
                   {cart.length === 0 ? (
-                    <div className="text-center text-gray-500 py-8">
-                      Conta vazia
+                    <div className="text-center text-gray-500 py-8 border-2 border-dashed border-gray-200 rounded-xl">
+                      <ShoppingCart className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                      <p className="font-bold text-gray-600 text-sm">Conta vazia</p>
+                      <p className="text-xs text-gray-400 mt-1">Nenhum produto adicionado ainda</p>
+                      <button
+                        type="button"
+                        onClick={() => setMobileTab("produtos")}
+                        className="md:hidden mt-3 text-xs bg-red-50 text-red-700 font-bold px-3 py-1.5 rounded-lg border border-red-200 cursor-pointer"
+                      >
+                        + Adicionar Produtos
+                      </button>
                     </div>
                   ) : (
-                    cart.map((item, index) => (
-                      <div
-                        key={`cart-item-${item.id}-${index}`}
-                        className="flex flex-col bg-white border border-gray-200 rounded-lg p-3 shadow-sm relative gap-2"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 pr-2">
-                            <p className="font-bold text-gray-800 text-sm leading-tight">
-                              {item.name}
-                            </p>
-                            <p className="text-gray-500 text-[10px] font-medium mt-0.5">
-                              R$ {item.price.toFixed(2).replace(".", ",")} / un
-                            </p>
+                    <div className="space-y-2.5">
+                      {cart.map((item, index) => (
+                        <div
+                          key={`cart-item-${item.id}-${index}`}
+                          className="flex flex-col bg-white border border-gray-200 rounded-xl p-3 shadow-xs gap-2 hover:border-gray-300 transition-colors"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 pr-2">
+                              <p className="font-bold text-gray-800 text-sm leading-tight">
+                                {item.name}
+                              </p>
+                              <p className="text-gray-500 text-[11px] font-medium mt-0.5">
+                                R$ {item.price.toFixed(2).replace(".", ",")} / un
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-black text-gray-800 text-sm">
+                                R${" "}
+                                {(item.price * item.quantity)
+                                  .toFixed(2)
+                                  .replace(".", ",")}
+                              </p>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-black text-gray-800 text-sm">
-                              R${" "}
-                              {(item.price * item.quantity)
-                                .toFixed(2)
-                                .replace(".", ",")}
-                            </p>
-                          </div>
-                        </div>
 
-                        <div className="flex flex-col border-t border-gray-100 pt-2 mt-1 gap-2">
-                          <div className="flex-1 w-full">
+                          <div className="flex flex-col border-t border-gray-100 pt-2 mt-1 gap-2">
                             <input
                               type="text"
                               placeholder="Observação (ex: com gelo, sem cebola)"
@@ -790,162 +880,199 @@ export default function Fiados() {
                               onChange={(e) =>
                                 updateObservation(item.id, e.target.value)
                               }
-                              className="w-full text-xs bg-gray-50 border border-gray-200 rounded p-1.5 focus:ring-1 focus:ring-red-500 focus:bg-white transition-colors outline-none"
+                              className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg p-1.5 focus:ring-1 focus:ring-red-500 focus:bg-white transition-colors outline-none"
                             />
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] text-gray-400 font-medium">Quantidade</span>
+                              <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg border border-gray-200">
+                                <button
+                                  type="button"
+                                  onClick={() => updateQuantity(item.id, -1)}
+                                  className="p-1 bg-white rounded shadow-xs hover:bg-gray-50 text-gray-700 transition-colors cursor-pointer"
+                                  title="Diminuir"
+                                >
+                                  <Minus className="w-3.5 h-3.5" />
+                                </button>
+                                <span className="w-8 text-center font-black text-gray-800 text-xs">
+                                  {item.quantity}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => updateQuantity(item.id, 1)}
+                                  className="p-1 bg-white rounded shadow-xs hover:bg-gray-50 text-gray-700 transition-colors cursor-pointer"
+                                  title="Aumentar"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeFromCart(item.id)}
+                                  className="p-1 text-red-500 hover:text-white hover:bg-red-600 rounded ml-1 transition-colors cursor-pointer"
+                                  title="Remover"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center justify-end space-x-1 bg-gray-50 p-1 rounded border border-gray-200">
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* SEÇÃO DE PAGAMENTO, TOTAIS, RECEBER E APAGAR DÍVIDA */}
+                  <div className="pt-3 border-t border-gray-200 space-y-4">
+                    {/* Forma de Pagamento */}
+                    <div>
+                      <p className="text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                        Forma de Pagamento para Quitar
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod("dinheiro")}
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 text-xs font-bold transition-all cursor-pointer ${
+                            paymentMethod === "dinheiro"
+                              ? "bg-green-50 border-green-500 text-green-700 shadow-xs"
+                              : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                          }`}
+                        >
+                          <Banknote className="w-5 h-5 mb-1 text-green-600" />
+                          <span>Dinheiro</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod("cartao")}
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 text-xs font-bold transition-all cursor-pointer ${
+                            paymentMethod === "cartao"
+                              ? "bg-red-50 border-red-500 text-red-700 shadow-xs"
+                              : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                          }`}
+                        >
+                          <CreditCard className="w-5 h-5 mb-1 text-red-600" />
+                          <span>Cartão</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod("pix")}
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 text-xs font-bold transition-all cursor-pointer ${
+                            paymentMethod === "pix"
+                              ? "bg-purple-50 border-purple-500 text-purple-700 shadow-xs"
+                              : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                          }`}
+                        >
+                          <QrCode className="w-5 h-5 mb-1 text-purple-600" />
+                          <span>PIX</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Resumo Financeiro */}
+                    <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-200 space-y-2">
+                      <div className="flex justify-between items-center text-xs font-semibold text-gray-600">
+                        <span>Subtotal dos Itens:</span>
+                        <span className="font-bold text-gray-800 text-sm">
+                          R$ {subtotal.toFixed(2).replace(".", ",")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs font-semibold text-gray-600 pt-1.5 border-t border-gray-200">
+                        <span>Desconto:</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-400">R$</span>
+                          <input
+                            type="number"
+                            value={discount}
+                            onChange={(e) => setDiscount(e.target.value ? Number(e.target.value) : "")}
+                            className="w-20 border border-gray-300 rounded-lg p-1 text-right font-bold text-xs focus:border-red-500 outline-none bg-white"
+                            placeholder="0,00"
+                            min="0"
+                            step="0.01"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                        <span className="font-extrabold text-gray-800 text-sm sm:text-base">
+                          Total da Dívida:
+                        </span>
+                        <span className="font-black text-2xl text-red-600">
+                          R$ {total.toFixed(2).replace(".", ",")}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Botões de Ação: Salvar e Receber */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <button
+                        type="button"
+                        onClick={handleSaveFiado}
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-800 py-3 rounded-xl font-bold text-sm transition-colors border border-gray-300 cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                      >
+                        <span>Salvar Conta</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCheckout}
+                        disabled={cart.length === 0 || !currentSession || isProcessing}
+                        className="bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-black text-sm shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <CheckCircle className="w-5 h-5 shrink-0" />
+                        <span>{isProcessing ? "Recebendo..." : "Receber"}</span>
+                      </button>
+                    </div>
+
+                    {!currentSession && (
+                      <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-center">
+                        <p className="text-amber-900 text-xs font-bold">
+                          ⚠️ Caixa fechado! Abra o caixa no balcão para receber o pagamento.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Seção de Apagar Dívida (Sem Pagamento) */}
+                    <div className="pt-1 pb-6">
+                      {isConfirmingDelete ? (
+                        <div className="flex flex-col items-center bg-red-50 p-3.5 rounded-xl border-2 border-red-300 space-y-2.5">
+                          <div className="text-center">
+                            <p className="text-sm font-black text-red-900">
+                              Deseja mesmo apagar a dívida?
+                            </p>
+                            <p className="text-xs text-red-700 mt-0.5">
+                              Essa ação removerá o fiado sem registrar pagamento no caixa.
+                            </p>
+                          </div>
+                          <div className="flex gap-2 w-full pt-1">
                             <button
-                              onClick={() => updateQuantity(item.id, -1)}
-                              className="p-1 bg-white rounded shadow-sm hover:bg-gray-100 text-gray-700 transition-colors"
+                              type="button"
+                              onClick={confirmDeleteFiado}
+                              disabled={isDeleting}
+                              className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 px-3 rounded-xl font-black text-xs transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer"
                             >
-                              <Minus className="w-3 h-3" />
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>{isDeleting ? "Apagando..." : "Sim, Apagar"}</span>
                             </button>
-                            <span className="w-6 text-center font-black text-gray-800 text-xs">
-                              {item.quantity}
-                            </span>
                             <button
-                              onClick={() => updateQuantity(item.id, 1)}
-                              className="p-1 bg-white rounded shadow-sm hover:bg-gray-100 text-gray-700 transition-colors"
+                              type="button"
+                              onClick={() => setIsConfirmingDelete(false)}
+                              disabled={isDeleting}
+                              className="flex-1 bg-white hover:bg-gray-100 text-gray-700 py-2.5 px-3 rounded-xl font-bold text-xs border border-gray-300 transition-all cursor-pointer"
                             >
-                              <Plus className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => removeFromCart(item.id)}
-                              className="p-1 text-red-500 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded ml-1 transition-colors"
-                            >
-                              <Trash2 className="w-3 h-3" />
+                              Cancelar
                             </button>
                           </div>
                         </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="p-4 border-t bg-gray-50">
-                  <div className="mb-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">
-                      Forma de Pagamento
-                    </p>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        onClick={() => setPaymentMethod("dinheiro")}
-                        className={`flex flex-col items-center justify-center p-2 rounded border text-xs font-medium transition ${
-                          paymentMethod === "dinheiro"
-                            ? "bg-green-50 border-green-500 text-green-700"
-                            : "bg-white border-gray-200 text-gray-600"
-                        }`}
-                      >
-                        <Banknote className="w-5 h-5 mb-1" />
-                        Dinheiro
-                      </button>
-                      <button
-                        onClick={() => setPaymentMethod("cartao")}
-                        className={`flex flex-col items-center justify-center p-2 rounded border text-xs font-medium transition ${
-                          paymentMethod === "cartao"
-                            ? "bg-red-50 border-red-500 text-red-700"
-                            : "bg-white border-gray-200 text-gray-600"
-                        }`}
-                      >
-                        <CreditCard className="w-5 h-5 mb-1" />
-                        Cartão
-                      </button>
-                      <button
-                        onClick={() => setPaymentMethod("pix")}
-                        className={`flex flex-col items-center justify-center p-2 rounded border text-xs font-medium transition ${
-                          paymentMethod === "pix"
-                            ? "bg-purple-50 border-purple-500 text-purple-700"
-                            : "bg-white border-gray-200 text-gray-600"
-                        }`}
-                      >
-                        <QrCode className="w-5 h-5 mb-1" />
-                        PIX
-                      </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleDeleteFiado}
+                          disabled={isDeleting}
+                          className="w-full bg-white hover:bg-red-50 text-red-600 hover:text-red-700 border border-red-200 hover:border-red-300 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                          <span>Apagar Dívida (Sem Pagamento)</span>
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-600 text-sm font-medium">
-                      Subtotal
-                    </span>
-                    <span className="text-lg font-bold text-gray-700">
-                      R$ {subtotal.toFixed(2).replace(".", ",")}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-200">
-                    <span className="text-gray-600 text-sm font-medium">
-                      Desconto (R$)
-                    </span>
-                    <input
-                      type="number"
-                      value={discount}
-                      onChange={(e) => setDiscount(e.target.value ? Number(e.target.value) : "")}
-                      className="w-24 border-2 border-gray-200 rounded-lg p-1 text-right focus:border-gray-500 outline-none"
-                      placeholder="0,00"
-                      min="0"
-                      step="0.01"
-                    />
-                  </div>
-                  <div className="flex justify-between items-center mb-4 pt-2">
-                    <span className="text-gray-600 font-medium">
-                      Total da Dívida
-                    </span>
-                    <span className="text-2xl font-bold text-red-600">
-                      R$ {total.toFixed(2).replace(".", ",")}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={handleSaveFiado}
-                      className="bg-red-100 text-red-700 py-2 rounded-lg font-bold hover:bg-red-200"
-                    >
-                      Salvar Conta
-                    </button>
-                    <button
-                      onClick={handleCheckout}
-                      disabled={cart.length === 0 || !currentSession || isProcessing}
-                      className="bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center transition-all"
-                    >
-                      <CheckCircle className="w-5 h-5 mr-1" />
-                      {isProcessing ? "Recebendo..." : "Receber"}
-                    </button>
-                  </div>
-
-                  {isConfirmingDelete ? (
-                    <div className="flex flex-col items-center shrink-0 bg-red-50 p-3 rounded-xl border border-red-200 mt-4">
-                      <p className="text-sm font-bold tracking-tight text-red-800 mb-2">Deseja mesmo apagar a dívida?</p>
-                      <div className="flex gap-2 w-full">
-                        <button
-                          onClick={confirmDeleteFiado}
-                          disabled={isDeleting}
-                          className="flex-1 bg-red-600 text-white px-2 py-2 rounded-lg font-bold hover:bg-red-700 transition-all text-xs"
-                        >
-                          Sim, Apagar
-                        </button>
-                        <button
-                          onClick={() => setIsConfirmingDelete(false)}
-                          disabled={isDeleting}
-                          className="flex-1 bg-white text-gray-700 px-2 py-2 rounded-lg font-bold hover:bg-gray-100 border border-gray-300 transition-all text-xs"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={handleDeleteFiado}
-                      disabled={isDeleting}
-                      className="w-full mt-3 bg-white border border-red-200 text-red-500 py-2 rounded-lg font-bold hover:bg-red-50 text-sm flex items-center justify-center transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Apagar Dívida (Sem Pagamento)
-                    </button>
-                  )}
-
-                  {!currentSession && (
-                    <p className="text-red-500 text-xs text-center mt-2">
-                      Abra o caixa para receber o pagamento.
-                    </p>
-                  )}
                 </div>
               </div>
             </div>

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { collection, query, onSnapshot, doc, getDoc, addDoc } from "firebase/firestore";
+import React, { useState, useEffect, useRef } from "react";
+import { collection, query, onSnapshot, doc, getDoc, addDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { ShoppingBag, ChevronRight, MapPin, Truck, Plus, Minus, Trash2, Smartphone, Banknote, CreditCard, QrCode, Scale, CheckCircle2, MessageCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -31,6 +31,9 @@ export default function Cardapio() {
   const [step, setStep] = useState<"catalog" | "checkout">("catalog");
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [lastWhatsappUrl, setLastWhatsappUrl] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
+  const orderIdRef = useRef<string | null>(null);
 
   // Checkout Form
   const [orderMode, setOrderMode] = useState<"entrega" | "retirada">("entrega");
@@ -162,6 +165,15 @@ export default function Cardapio() {
   const finalTotal = subtotal + (orderMode === "retirada" ? 0 : (deliveryFee || 0));
 
   const handleSendOrder = async () => {
+    if (isSubmittingRef.current || isSubmitting) {
+      return;
+    }
+
+    if (cart.length === 0) {
+      alert("Seu carrinho está vazio!");
+      return;
+    }
+
     if (!customerName.trim()) {
       alert("Por favor, preencha seu nome para identificação do pedido.");
       return;
@@ -171,6 +183,9 @@ export default function Cardapio() {
       alert("Por favor, preencha seu endereço para a entrega.");
       return;
     }
+
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
 
     const effectivePhone = (whatsappNumber || contextWhatsapp || "").trim();
     const cleanedDigits = effectivePhone.replace(/\D/g, "");
@@ -187,7 +202,13 @@ export default function Cardapio() {
     const finalRegion = isRetirada ? "Retirada no Balcão" : (selectedRegionName || "");
     const finalFee = isRetirada ? 0 : (Number(deliveryFee) || 0);
 
-    // Also register order in Firestore so PDV/Kitchen receives instant Push Notification & Audio Chime
+    // Use an idempotent document ID for this checkout session to guarantee no duplicate orders in Firestore
+    if (!orderIdRef.current) {
+      orderIdRef.current = `deliv_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+    }
+    const currentOrderId = orderIdRef.current;
+
+    // Register or update order in Firestore using idempotent document ID
     try {
       const orderPayload = {
         type: "delivery",
@@ -213,7 +234,7 @@ export default function Cardapio() {
         observations: observations.trim(),
         createdAt: new Date().toISOString(),
       };
-      await addDoc(collection(db, "orders"), orderPayload);
+      await setDoc(doc(db, "orders", currentOrderId), orderPayload);
     } catch (err) {
       console.warn("Não foi possível registrar o pedido no banco em tempo real:", err);
     }
@@ -302,6 +323,8 @@ export default function Cardapio() {
       }
     } catch {
       window.location.href = whatsappUrl;
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -863,10 +886,20 @@ export default function Cardapio() {
                 </div>
                 <button
                   onClick={handleSendOrder}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-black text-lg py-4 rounded-2xl shadow-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={isSubmitting || cart.length === 0}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-lg py-4 rounded-2xl shadow-lg transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <MessageCircle className="w-6 h-6" />
-                  Enviar Pedido p/ WhatsApp
+                  {isSubmitting ? (
+                    <>
+                      <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Enviando Pedido...</span>
+                    </>
+                  ) : (
+                    <>
+                      <MessageCircle className="w-6 h-6" />
+                      <span>Enviar Pedido p/ WhatsApp</span>
+                    </>
+                  )}
                 </button>
               </div>
             )}
@@ -905,11 +938,14 @@ export default function Cardapio() {
               <button
                 type="button"
                 onClick={() => {
+                  orderIdRef.current = null;
+                  isSubmittingRef.current = false;
+                  setIsSubmitting(false);
                   setOrderPlaced(false);
                   setCart([]);
                   setStep("catalog");
                 }}
-                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-2xl transition-colors text-sm"
+                className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-2xl transition-colors text-sm cursor-pointer"
               >
                 Fazer Novo Pedido / Fechar
               </button>

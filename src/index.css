@@ -170,6 +170,29 @@ aside {
     background-color: #dc2626;
   }
 
+  /* Indigo highlighted scrollbar for ERP module */
+  .scrollbar-indigo {
+    scrollbar-width: thin;
+    scrollbar-color: #6366f1 rgba(99, 102, 241, 0.08);
+  }
+  .scrollbar-indigo::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-indigo::-webkit-scrollbar-track {
+    background: rgba(99, 102, 241, 0.05);
+    border-radius: 9999px;
+  }
+  .scrollbar-indigo::-webkit-scrollbar-thumb {
+    background-color: #6366f1;
+    border-radius: 9999px;
+    border: 1px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar-indigo::-webkit-scrollbar-thumb:hover {
+    background-color: #4f46e5;
+  }
+
   /* Completely hidden scrollbar when clean gestures are preferred */
   .scrollbar-none,
   .scrollbar-hide {

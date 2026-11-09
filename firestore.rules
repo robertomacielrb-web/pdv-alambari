@@ -277,5 +277,9 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    match /test/{testId} {
+      allow read: if true;
+    }
   }
 }

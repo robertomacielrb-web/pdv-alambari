@@ -26,9 +26,17 @@ import {
   Search,
   Filter,
   ShoppingCart,
+  MessageCircle,
+  Phone,
 } from "lucide-react";
 import { format } from "date-fns";
 import { executePrint } from "../lib/printHelper";
+import { useStoreSettings } from "../contexts/StoreSettingsContext";
+import {
+  sendFiadoWhatsApp,
+  formatFiadoWhatsAppMessage,
+  formatPhoneDisplay,
+} from "../lib/fiadoWhatsApp";
 
 interface Product {
   id: string;
@@ -48,8 +56,10 @@ interface Order {
   type: string;
   status: string;
   customerName: string;
+  customerPhone?: string;
   items: CartItem[];
   total: number;
+  discount?: number;
   password?: number;
   createdAt?: string;
   closedAt?: string;
@@ -71,6 +81,7 @@ export default function Fiados() {
     null,
   );
 
+  const { storeName, pixKey } = useStoreSettings();
   const [selectedFiado, setSelectedFiado] = useState<Order | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<
@@ -80,8 +91,13 @@ export default function Fiados() {
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [mobileTab, setMobileTab] = useState<"produtos" | "conta">("conta");
+
+  const [whatsAppModalOrder, setWhatsAppModalOrder] = useState<Order | null>(null);
+  const [whatsAppPhone, setWhatsAppPhone] = useState("");
+  const [isSavingPhone, setIsSavingPhone] = useState(false);
 
   useEffect(() => {
     // Get open cashier session
@@ -212,12 +228,15 @@ export default function Fiados() {
         type: "fiado",
         status: "open",
         customerName: newCustomerName,
+        customerPhone: newCustomerPhone.trim(),
         items: [],
         total: 0,
         createdAt: new Date().toISOString(),
       });
       setIsNewModalOpen(false);
+      const savedPhone = newCustomerPhone.trim();
       setNewCustomerName("");
+      setNewCustomerPhone("");
 
       // Auto open modal right after creating
       setSelectedFiado({
@@ -225,6 +244,7 @@ export default function Fiados() {
         type: "fiado",
         status: "open",
         customerName: newCustomerName,
+        customerPhone: savedPhone,
         items: [],
         total: 0,
       });
@@ -303,6 +323,8 @@ export default function Fiados() {
 
     try {
       await updateDoc(doc(db, "orders", selectedFiado.id), {
+        customerName: selectedFiado.customerName,
+        customerPhone: selectedFiado.customerPhone || "",
         items: cart.map((item) => ({
           productId: item.id || "unknown",
           name: item.name || "Produto",
@@ -312,6 +334,7 @@ export default function Fiados() {
           productionStatus: item.productionStatus || "pending",
         })),
         total: Number(total) || 0,
+        discount: Number(discount) || 0,
         createdAt:
           typeof selectedFiado.createdAt === "string" &&
           selectedFiado.createdAt.includes("T")
@@ -329,6 +352,51 @@ export default function Fiados() {
         OperationType.UPDATE,
         `orders/${selectedFiado.id}`,
       );
+    }
+  };
+
+  const openWhatsAppModal = (fiado: Order) => {
+    // If the modal for this fiado is open, use the current active cart & discount
+    if (selectedFiado && selectedFiado.id === fiado.id) {
+      setWhatsAppModalOrder({
+        ...fiado,
+        items: cart,
+        total: total,
+        discount: Number(discount) || 0,
+      });
+      setWhatsAppPhone(selectedFiado.customerPhone || fiado.customerPhone || "");
+    } else {
+      setWhatsAppModalOrder(fiado);
+      setWhatsAppPhone(fiado.customerPhone || "");
+    }
+  };
+
+  const handleSendWhatsAppFromModal = async () => {
+    if (!whatsAppModalOrder) return;
+    setIsSavingPhone(true);
+    const targetPhone = whatsAppPhone.trim();
+    try {
+      // If phone changed, save to order in Firestore
+      if (targetPhone !== (whatsAppModalOrder.customerPhone || "")) {
+        await updateDoc(doc(db, "orders", whatsAppModalOrder.id), {
+          customerPhone: targetPhone,
+        });
+        if (selectedFiado && selectedFiado.id === whatsAppModalOrder.id) {
+          setSelectedFiado({
+            ...selectedFiado,
+            customerPhone: targetPhone,
+          });
+        }
+      }
+
+      sendFiadoWhatsApp(whatsAppModalOrder, { storeName, pixKey }, targetPhone);
+      setWhatsAppModalOrder(null);
+    } catch (err) {
+      console.error(err);
+      sendFiadoWhatsApp(whatsAppModalOrder, { storeName, pixKey }, targetPhone);
+      setWhatsAppModalOrder(null);
+    } finally {
+      setIsSavingPhone(false);
     }
   };
 
@@ -540,22 +608,55 @@ export default function Fiados() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {openFiados.map((fiado) => (
-          <button
+          <div
             key={fiado.id}
-            onClick={() => openFiadoModal(fiado)}
-            className="bg-white p-6 rounded-lg shadow flex flex-col items-center justify-center transition-transform hover:scale-105 hover:shadow-md border border-gray-100"
+            className="bg-white rounded-2xl shadow-sm hover:shadow-md border border-gray-100 flex flex-col justify-between overflow-hidden transition-all group"
           >
-            <Users className="w-8 h-8 mb-3 text-red-600" />
-            <span className="font-bold text-lg text-gray-800 truncate w-full text-center">
-              {fiado.customerName}
-            </span>
-            <span className="text-sm mt-2 text-gray-500">
-              Dívida:{" "}
-              <span className="font-bold text-red-600">
-                R$ {fiado.total.toFixed(2).replace(".", ",")}
+            <button
+              type="button"
+              onClick={() => openFiadoModal(fiado)}
+              className="p-5 flex flex-col items-center justify-center text-center cursor-pointer flex-1 w-full hover:bg-gray-50/50 transition-colors"
+            >
+              <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mb-2.5 group-hover:scale-105 transition-transform">
+                <Users className="w-6 h-6" />
+              </div>
+              <span className="font-black text-lg text-gray-900 truncate w-full">
+                {fiado.customerName}
               </span>
-            </span>
-          </button>
+              {fiado.customerPhone && (
+                <span className="text-xs text-gray-400 font-medium flex items-center gap-1 mt-0.5">
+                  <Phone className="w-3 h-3 text-emerald-600" />
+                  {formatPhoneDisplay(fiado.customerPhone)}
+                </span>
+              )}
+              <div className="mt-3 bg-red-50 px-3 py-1 rounded-full border border-red-100">
+                <span className="text-xs text-red-600 font-bold">Dívida: </span>
+                <span className="text-sm font-black text-red-700">
+                  R$ {fiado.total.toFixed(2).replace(".", ",")}
+                </span>
+              </div>
+            </button>
+
+            {/* Quick Actions Footer */}
+            <div className="border-t border-gray-100 bg-gray-50/80 p-2.5 flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => openFiadoModal(fiado)}
+                className="flex-1 py-2 px-2.5 bg-white hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-bold border border-gray-200 transition-colors cursor-pointer text-center"
+              >
+                Abrir Conta
+              </button>
+              <button
+                type="button"
+                onClick={() => openWhatsAppModal(fiado)}
+                className="py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1 shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+                title="Enviar conta / extrato por WhatsApp"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>WhatsApp</span>
+              </button>
+            </div>
+          </div>
         ))}
         {openFiados.length === 0 && (
           <div className="col-span-full text-center py-12 text-gray-500 bg-white rounded-lg shadow">
@@ -580,30 +681,54 @@ export default function Fiados() {
             <form onSubmit={handleCreateFiado}>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nome do Cliente
+                  Nome do Cliente *
                 </label>
                 <input
                   type="text"
                   required
                   value={newCustomerName}
                   onChange={(e) => setNewCustomerName(e.target.value)}
-                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border"
+                  className="w-full rounded-xl border-gray-300 shadow-xs focus:border-red-500 focus:ring-red-500 p-2.5 border text-sm"
                   placeholder="Ex: João da Silva"
+                  autoFocus
                 />
               </div>
+
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                  <span>Telefone / WhatsApp</span>
+                  <span className="text-xs text-gray-400 font-normal">opcional</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-emerald-600">
+                    <MessageCircle className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    value={newCustomerPhone}
+                    onChange={(e) => setNewCustomerPhone(e.target.value)}
+                    className="w-full pl-9 rounded-xl border-gray-300 shadow-xs focus:border-red-500 focus:ring-red-500 p-2.5 border text-sm"
+                    placeholder="Ex: (11) 99999-9999"
+                  />
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Permite enviar a conta e extrato diretamente pelo WhatsApp do cliente.
+                </p>
+              </div>
+
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
                   onClick={() => setIsNewModalOpen(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                  className="px-4 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 text-sm font-bold cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                  className="px-5 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 font-bold text-sm shadow-sm cursor-pointer"
                 >
-                  Criar
+                  Criar Conta
                 </button>
               </div>
             </form>
@@ -615,9 +740,9 @@ export default function Fiados() {
       {selectedFiado && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-2xl w-full max-w-5xl h-[95vh] sm:h-[90vh] max-h-[880px] flex flex-col overflow-hidden shadow-2xl">
-            <div className="p-3.5 sm:p-4 border-b bg-gray-50 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg sm:text-xl font-bold text-gray-800 flex items-center">
+            <div className="p-3 sm:p-4 border-b bg-gray-50 flex flex-wrap justify-between items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-gray-800 flex items-center">
                   <span className="text-gray-500">Conta:</span>
                   <input
                     type="text"
@@ -647,18 +772,66 @@ export default function Fiados() {
                         }
                       }
                     }}
-                    className="ml-2 bg-transparent border-b border-dashed border-gray-400 focus:border-red-500 outline-none text-base sm:text-xl font-black text-gray-900 w-auto min-w-[160px] sm:min-w-[200px]"
+                    className="ml-2 bg-transparent border-b border-dashed border-gray-400 focus:border-red-500 outline-none text-base sm:text-lg font-black text-gray-900 w-auto min-w-[130px] sm:min-w-[170px]"
                   />
                 </h2>
+
+                <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-xl border border-gray-200 shadow-2xs">
+                  <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="WhatsApp..."
+                    value={selectedFiado.customerPhone || ""}
+                    onChange={(e) =>
+                      setSelectedFiado({
+                        ...selectedFiado,
+                        customerPhone: e.target.value,
+                      })
+                    }
+                    onBlur={async (e) => {
+                      const newPhone = e.target.value;
+                      try {
+                        await updateDoc(doc(db, "orders", selectedFiado.id), {
+                          customerPhone: newPhone.trim(),
+                        });
+                      } catch (error: any) {
+                        console.error(error);
+                      }
+                    }}
+                    className="text-xs font-bold outline-none bg-transparent w-28 sm:w-32 text-gray-700"
+                  />
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={closeFiadoModal}
-                className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                title="Fechar modal"
-              >
-                <X className="w-6 h-6" />
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openWhatsAppModal(selectedFiado)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                  title="Enviar extrato da conta por WhatsApp"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Enviar WhatsApp</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePrint({ ...selectedFiado, items: cart, total, discount })}
+                  className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer"
+                  title="Imprimir comanda"
+                >
+                  <Printer className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={closeFiadoModal}
+                  className="text-gray-400 hover:text-gray-700 p-1.5 rounded-xl hover:bg-gray-200 transition-colors cursor-pointer"
+                  title="Fechar modal"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Abas Mobile para alternar facilmente entre Produtos e Conta/Receber */}
@@ -1000,6 +1173,16 @@ export default function Fiados() {
                       </div>
                     </div>
 
+                    {/* Botão de Enviar Extrato WhatsApp */}
+                    <button
+                      type="button"
+                      onClick={() => openWhatsAppModal(selectedFiado)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-sm shadow-sm hover:shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <MessageCircle className="w-5 h-5" />
+                      <span>Enviar Extrato no WhatsApp</span>
+                    </button>
+
                     {/* Botões de Ação: Salvar e Receber */}
                     <div className="grid grid-cols-2 gap-2.5">
                       <button
@@ -1075,6 +1258,92 @@ export default function Fiados() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL ENVIAR WHATSAPP ================= */}
+      {whatsAppModalOrder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl flex flex-col space-y-4 max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between border-b pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center shadow-xs">
+                  <MessageCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-gray-900 leading-tight">
+                    Enviar Conta no WhatsApp
+                  </h3>
+                  <p className="text-xs text-gray-500 font-medium">
+                    Cliente: <strong className="text-gray-800">{whatsAppModalOrder.customerName}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWhatsAppModalOrder(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 flex-1 overflow-y-auto scrollbar-thin pr-1">
+              {/* Phone Input */}
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>WhatsApp do Cliente (com DDD)</span>
+                  <span className="text-[11px] text-gray-400 font-normal lowercase">opcional</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-emerald-600">
+                    <Phone className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="text"
+                    value={whatsAppPhone}
+                    onChange={(e) => setWhatsAppPhone(e.target.value)}
+                    placeholder="Ex: (11) 99999-9999"
+                    className="w-full pl-9 pr-3 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-bold focus:border-emerald-500 outline-none transition-colors"
+                    autoFocus
+                  />
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Se informado, o WhatsApp abrirá diretamente no chat do cliente e o número ficará salvo. Se deixar em branco, você poderá escolher o contato na lista do WhatsApp.
+                </p>
+              </div>
+
+              {/* Message Preview */}
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-1.5">
+                  Prévia do Extrato que será enviado:
+                </label>
+                <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-3.5 text-xs text-gray-800 font-mono whitespace-pre-wrap max-h-48 overflow-y-auto scrollbar-thin select-text">
+                  {formatFiadoWhatsAppMessage(whatsAppModalOrder, { storeName, pixKey })}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex gap-2.5 pt-2 border-t shrink-0">
+              <button
+                type="button"
+                onClick={() => setWhatsAppModalOrder(null)}
+                className="flex-1 py-3 border border-gray-200 rounded-xl font-bold text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSendWhatsAppFromModal}
+                disabled={isSavingPhone}
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>{isSavingPhone ? "Enviando..." : "Abrir no WhatsApp"}</span>
+              </button>
             </div>
           </div>
         </div>

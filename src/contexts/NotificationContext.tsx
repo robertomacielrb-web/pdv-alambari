@@ -263,8 +263,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             if (!knownOrderIdsRef.current.has(docId)) {
               knownOrderIdsRef.current.add(docId);
 
-              // 1. Delivery order notification
-              if (order.type === 'delivery' && settings.notifyDelivery) {
+              // 1. Delivery order notification (only for incoming open orders awaiting fulfillment)
+              if (order.type === 'delivery' && order.status === 'open' && settings.notifyDelivery) {
                 const customer = order.customerName || 'Cliente Online';
                 const totalFormatted = order.total
                   ? `R$ ${Number(order.total).toFixed(2).replace('.', ',')}`

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   collection,
@@ -90,6 +90,7 @@ export default function Delivery() {
   const [deliveryType, setDeliveryType] = useState<"entrega" | "retirada">("entrega");
   const [step, setStep] = useState<1 | 2>(1);
   const [isProcessing, setIsProcessing] = useState(false);
+  const isProcessingRef = useRef(false);
   const [pendingOnlineOrders, setPendingOnlineOrders] = useState<any[]>([]);
   const [activePendingOrderId, setActivePendingOrderId] = useState<string | null>(null);
 
@@ -556,7 +557,7 @@ export default function Delivery() {
       alert("Abra o caixa primeiro!");
       return;
     }
-    if (cart.length === 0 || isProcessing) return;
+    if (cart.length === 0 || isProcessing || isProcessingRef.current) return;
     if (!customerName.trim()) {
       alert("O nome do cliente é obrigatório!");
       return;
@@ -582,6 +583,7 @@ export default function Delivery() {
       if (pixVal > 0) finalSplitPayments.push({ method: "pix", amount: pixVal });
     }
 
+    isProcessingRef.current = true;
     setIsProcessing(true);
     try {
       const password = await getNextPassword(currentSession.id);
@@ -621,8 +623,38 @@ export default function Delivery() {
         cashierId: currentSession.id || "unknown",
       };
 
-      if (activePendingOrderId) {
-        await updateDoc(doc(db, "orders", activePendingOrderId), orderData);
+      let targetOrderId = activePendingOrderId;
+      // Se não havia pedido pendente carregado explicitamente, mas existe um pedido delivery pendente
+      // com o mesmo nome ou telefone do cliente, vincular a ele para não criar duplicata no banco
+      if (!targetOrderId && customerName.trim()) {
+        const normName = customerName.trim().toLowerCase();
+        const normPhone = phoneNumber.replace(/\D/g, "");
+        const matched = pendingOnlineOrders.find((po) => {
+          const poName = (po.customerName || "").trim().toLowerCase();
+          const poPhone = (po.deliveryPhone || "").replace(/\D/g, "");
+          return (normName && poName && normName === poName) || (normPhone && poPhone && normPhone === poPhone);
+        });
+        if (matched) {
+          targetOrderId = matched.id;
+        }
+      }
+
+      if (targetOrderId) {
+        await updateDoc(doc(db, "orders", targetOrderId), orderData);
+
+        // Se houverem outros pedidos pendentes abertos para o mesmo cliente (ex: cliente clicou 2x no cardápio online),
+        // limpá-los para evitar duplicatas pendentes
+        const normCust = customerName.trim().toLowerCase();
+        const duplicatePendings = pendingOnlineOrders.filter(
+          (po) => po.id !== targetOrderId && (po.customerName || "").trim().toLowerCase() === normCust
+        );
+        for (const dup of duplicatePendings) {
+          try {
+            await deleteDoc(doc(db, "orders", dup.id));
+          } catch (e) {
+            console.warn("Could not clean up duplicate pending order:", e);
+          }
+        }
       } else {
         await addDoc(collection(db, "orders"), orderData);
       }
@@ -655,6 +687,7 @@ export default function Delivery() {
       );
       handleFirestoreError(error, OperationType.CREATE, "orders");
     } finally {
+      isProcessingRef.current = false;
       setIsProcessing(false);
     }
   };
@@ -1175,6 +1208,27 @@ export default function Delivery() {
                   placeholder="Nome completo ou Apelido"
                   className="w-full border-2 border-gray-200 rounded-xl p-3 focus:border-orange-500 outline-none"
                 />
+                {!activePendingOrderId && customerName.trim().length >= 2 && (() => {
+                  const norm = customerName.trim().toLowerCase();
+                  const match = pendingOnlineOrders.find(
+                    (po) => (po.customerName || "").trim().toLowerCase().includes(norm)
+                  );
+                  if (!match) return null;
+                  return (
+                    <div className="mt-1.5 p-2.5 bg-amber-50 border border-amber-300 rounded-xl flex items-center justify-between text-xs text-amber-950 shadow-xs">
+                      <span className="font-semibold">
+                        🔔 Existe um pedido online pendente de <strong>{match.customerName}</strong> (R$ {Number(match.total || 0).toFixed(2).replace('.', ',')})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleLoadPendingOrder(match)}
+                        className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold cursor-pointer transition-colors shrink-0 ml-2"
+                      >
+                        Carregar Pedido
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-widest">

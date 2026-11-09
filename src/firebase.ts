@@ -1,6 +1,12 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore, doc, getDocFromServer, enableMultiTabIndexedDbPersistence, enableIndexedDbPersistence } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  doc,
+  getDocFromServer
+} from 'firebase/firestore';
 
 // Import the Firebase configuration
 import firebaseConfig from '../firebase-applet-config.json';
@@ -8,34 +14,21 @@ import firebaseConfig from '../firebase-applet-config.json';
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
 export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
+  experimentalAutoDetectLongPolling: true,
 }, firebaseConfig.firestoreDatabaseId);
-
-// Enable offline persistence
-enableMultiTabIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    // Multiple tabs open, persistence can only be enabled in one tab at a a time.
-    // Fall back to standard indexeddb persistence for compatibility if needed.
-    console.warn('Firebase persistence warning: Multiple tabs open');
-  } else if (err.code === 'unimplemented') {
-    // The current browser does not support all of the features required to enable persistence
-    console.warn('Firebase persistence warning: Browser does not support persistence');
-  }
-});
 
 export const auth = getAuth(app);
 
 // Test connection to Firestore
 async function testConnection() {
   try {
-    // Try to get a non-existent doc just to test connectivity
-    await getDocFromServer(doc(db, '_connection_test_', 'ping'));
-    console.log("Firestore connection test successful");
+    await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Firestore connection failed: client is offline. Check Firebase configuration.");
-    } else {
-      console.warn("Firestore connection test warning (expected if no rules yet):", error);
+      console.error("Please check your Firebase configuration.");
     }
   }
 }
